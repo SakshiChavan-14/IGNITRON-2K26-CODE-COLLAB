@@ -1,0 +1,17 @@
+{
+  "name": "@ignitron/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared TypeScript definitions and utilities for IGNITRON 2K26",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
+
