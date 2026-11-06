@@ -4,6 +4,7 @@ import configuration from './config/configuration';
 import { HealthModule } from './health/health.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AuthModule } from './auth/auth.module';
     DatabaseModule,
     HealthModule,
     AuthModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
