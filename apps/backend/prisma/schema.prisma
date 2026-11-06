@@ -1,0 +1,281 @@
+// ==============================================================================
+// IGNITRON 2K26 — CODE RELAY PRISMA SCHEMA
+// Database: MySQL 8.0 Community Edition
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum TeamStatus {
+  ACTIVE
+  DISQUALIFIED
+  WITHDRAWN
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ORGANIZER
+  JUDGE
+}
+
+enum RoundStatus {
+  UPCOMING
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum EligibilityStatus {
+  PENDING
+  ELIGIBLE
+  INELIGIBLE
+}
+
+enum ParticipationStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  DISQUALIFIED
+  TIMED_OUT
+}
+
+enum SubmissionStatus {
+  PENDING
+  EVALUATING
+  ACCEPTED
+  WRONG_ANSWER
+  TIME_LIMIT_EXCEEDED
+  COMPILATION_ERROR
+  RUNTIME_ERROR
+  EVALUATED
+}
+
+enum ActorType {
+  SYSTEM
+  ADMIN
+  TEAM
+}
+
+enum SessionStatus {
+  ACTIVE
+  ENDED
+  EXPIRED
+  REVOKED
+}
+
+enum SessionTerminationReason {
+  USER_LOGOUT
+  TIMEOUT
+  ADMIN_REVOKED
+  DISPLACED
+}
+
+// ------------------------------------------------------------------------------
+// A. TEAM
+// ------------------------------------------------------------------------------
+model Team {
+  id                 String     @id @default(cuid())
+  teamCode           String     @unique @map("team_code")
+  teamName           String     @map("team_name")
+  institution        String?    @map("institution")
+  passwordHash       String     @default("") @map("password_hash")
+  mustChangePassword Boolean    @default(true) @map("must_change_password")
+  isActive           Boolean    @default(true) @map("is_active")
+  status             TeamStatus @default(ACTIVE)
+  lastLoginAt        DateTime?  @map("last_login_at")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  participants  Participant[]
+  roundProgress TeamRoundProgress[]
+  submissions   Submission[]
+  sessions      TeamSession[]
+
+  @@map("teams")
+}
+
+// ------------------------------------------------------------------------------
+// B. PARTICIPANT
+// ------------------------------------------------------------------------------
+model Participant {
+  id        String   @id @default(cuid())
+  teamId    String   @map("team_id")
+  fullName  String   @map("full_name")
+  email     String   @unique @map("email")
+  phone     String?  @map("phone")
+  studentId String?  @map("student_id")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  team     Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sessions TeamSession[]
+
+  @@index([teamId])
+  @@map("participants")
+}
+
+// ------------------------------------------------------------------------------
+// C. ADMIN ACCOUNT
+// ------------------------------------------------------------------------------
+model AdminAccount {
+  id           String    @id @default(cuid())
+  fullName     String    @map("full_name")
+  email        String    @unique @map("email")
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(ORGANIZER)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  evaluations Evaluation[]
+
+  @@map("admin_accounts")
+}
+
+// ------------------------------------------------------------------------------
+// D. COMPETITION ROUND
+// ------------------------------------------------------------------------------
+model CompetitionRound {
+  id              String      @id @default(cuid())
+  roundNumber     Int         @unique @map("round_number")
+  name            String      @map("name")
+  description     String      @db.Text @map("description")
+  durationMinutes Int         @map("duration_minutes")
+  maximumMarks    Decimal     @db.Decimal(6, 2) @map("maximum_marks")
+  status          RoundStatus @default(UPCOMING)
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  teamProgress TeamRoundProgress[]
+  submissions  Submission[]
+
+  @@map("competition_rounds")
+}
+
+// ------------------------------------------------------------------------------
+// E. TEAM ROUND PROGRESS
+// ------------------------------------------------------------------------------
+model TeamRoundProgress {
+  id                  String              @id @default(cuid())
+  teamId              String              @map("team_id")
+  roundId             String              @map("round_id")
+  eligibilityStatus   EligibilityStatus   @default(PENDING) @map("eligibility_status")
+  participationStatus ParticipationStatus @default(NOT_STARTED) @map("participation_status")
+  score               Decimal             @default(0.00) @db.Decimal(6, 2) @map("score")
+  startedAt           DateTime?           @map("started_at")
+  submittedAt         DateTime?           @map("submitted_at")
+  evaluatedAt         DateTime?           @map("evaluated_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  team  Team             @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  round CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
+
+  @@unique([teamId, roundId])
+  @@index([teamId])
+  @@index([roundId])
+  @@map("team_round_progress")
+}
+
+// ------------------------------------------------------------------------------
+// F. SUBMISSION
+// ------------------------------------------------------------------------------
+model Submission {
+  id               String           @id @default(cuid())
+  teamId           String           @map("team_id")
+  roundId          String           @map("round_id")
+  language         String           @map("language")
+  sourceCode       String           @db.LongText @map("source_code")
+  submissionStatus SubmissionStatus @default(PENDING) @map("submission_status")
+  score            Decimal?         @db.Decimal(6, 2) @map("score")
+  submittedAt      DateTime         @default(now()) @map("submitted_at")
+  evaluatedAt      DateTime?        @map("evaluated_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  team        Team             @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  round       CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  evaluations Evaluation[]
+
+  @@index([teamId])
+  @@index([roundId])
+  @@index([submissionStatus])
+  @@map("submissions")
+}
+
+// ------------------------------------------------------------------------------
+// G. EVALUATION
+// ------------------------------------------------------------------------------
+model Evaluation {
+  id           String    @id @default(cuid())
+  submissionId String    @map("submission_id")
+  evaluatorId  String?   @map("evaluator_id")
+  totalScore   Decimal   @db.Decimal(6, 2) @map("total_score")
+  feedback     String?   @db.Text @map("feedback")
+  evaluatedAt  DateTime  @default(now()) @map("evaluated_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  submission Submission    @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  evaluator  AdminAccount? @relation(fields: [evaluatorId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+  @@index([evaluatorId])
+  @@map("evaluations")
+}
+
+// ------------------------------------------------------------------------------
+// H. ACTIVITY LOG
+// ------------------------------------------------------------------------------
+model ActivityLog {
+  id          String    @id @default(cuid())
+  actorType   ActorType @map("actor_type")
+  actorId     String?   @map("actor_id")
+  action      String    @map("action")
+  description String    @db.Text @map("description")
+  metadata    Json?     @map("metadata")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([actorType, actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// ------------------------------------------------------------------------------
+// I. TEAM SESSION (Single Active Participant Session Enforcement)
+// ------------------------------------------------------------------------------
+model TeamSession {
+  id                String                    @id @default(cuid())
+  teamId            String                    @map("team_id")
+  participantId     String                    @map("participant_id")
+  tokenHash         String?                   @map("token_hash")
+  status            SessionStatus             @default(ACTIVE)
+  terminationReason SessionTerminationReason? @map("termination_reason")
+  ipAddress         String?                   @map("ip_address")
+  userAgent         String?                   @map("user_agent")
+  loginAt           DateTime                  @default(now()) @map("login_at")
+  lastActivityAt    DateTime                  @default(now()) @map("last_activity_at")
+  logoutAt          DateTime?                 @map("logout_at")
+  createdAt         DateTime                  @default(now()) @map("created_at")
+
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, status])
+  @@index([participantId, status])
+  @@index([lastActivityAt])
+  @@map("team_sessions")
+}
