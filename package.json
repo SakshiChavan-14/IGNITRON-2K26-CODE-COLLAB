@@ -1,0 +1,31 @@
+{
+  "name": "ignitron-2k26-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IGNITRON 2K26 — Code Relay Competition Platform Monorepo",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @ignitron/shared",
+    "build": "npm run build:shared && npm run build -w @ignitron/backend && npm run build -w @ignitron/frontend",
+    "dev": "npm run build:shared && concurrently -k -p \"[{name}]\" -n \"BACKEND,FRONTEND\" -c \"cyan,green\" \"npm run dev -w @ignitron/backend\" \"npm run dev -w @ignitron/frontend\"",
+    "dev:frontend": "npm run build:shared && npm run dev -w @ignitron/frontend",
+    "dev:backend": "npm run build:shared && npm run dev -w @ignitron/backend",
+    "lint": "npm run lint --workspaces",
+    "validate": "node scripts/validate-phase02.cjs",
+    "db:validate": "npm run prisma:validate -w @ignitron/backend",
+    "db:generate": "npm run prisma:generate -w @ignitron/backend",
+    "db:migrate": "npm run prisma:migrate -w @ignitron/backend",
+    "db:deploy": "npm run prisma:deploy -w @ignitron/backend",
+    "db:seed": "npm run prisma:seed -w @ignitron/backend",
+    "db:studio": "npm run prisma:studio -w @ignitron/backend",
+    "test:db": "node scripts/test-database.cjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}
+
