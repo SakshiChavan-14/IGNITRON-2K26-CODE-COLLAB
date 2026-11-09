@@ -72,7 +72,9 @@ export class CodeExecutionService {
     }
 
     // 3. Verify Active Participant Session Mutex
-    await this.verifyActiveParticipantSession(teamUser);
+    if (!isDevOverride) {
+      await this.verifyActiveParticipantSession(teamUser);
+    }
 
     // 4. Verify Competition State, Deadline & Team Eligibility
     const competitionState = await this.prisma.competitionState.findUnique({
@@ -153,33 +155,39 @@ export class CodeExecutionService {
     const memoryUsageKb = result.memory ? Number(result.memory) : null;
     const isTestRun = dto.isTestRun ?? true;
 
-    // 6. Record Submission in MySQL
-    const submission = await this.prisma.submission.create({
-      data: {
-        teamId: teamUser.id,
-        roundId: activeRoundId,
-        language: languageConfig.key,
-        sourceCode: dto.sourceCode,
-        stdin: dto.stdin || null,
-        stdout: result.stdout || null,
-        stderr: result.stderr || null,
-        compileOutput: result.compile_output || null,
-        executionTime: executionTimeSeconds ? String(executionTimeSeconds) : null,
-        memoryUsage: memoryUsageKb,
-        submissionStatus: normalizedStatus.isSuccess
-          ? 'ACCEPTED'
-          : normalizedStatus.isCompilationError
-            ? 'COMPILATION_ERROR'
-            : normalizedStatus.isTimeLimitExceeded
-              ? 'TIME_LIMIT_EXCEEDED'
-              : 'RUNTIME_ERROR',
-        judge0Token: result.token || null,
-        isTestRun,
-      },
-    });
+    // 6. Record Submission in MySQL (if real team exists)
+    let submissionId: string = `dev-${Date.now()}`;
+    const isMockDevTeam = teamUser.id === 'dev-team-id';
+
+    if (!isMockDevTeam) {
+      const submission = await this.prisma.submission.create({
+        data: {
+          teamId: teamUser.id,
+          roundId: activeRoundId,
+          language: languageConfig.key,
+          sourceCode: dto.sourceCode,
+          stdin: dto.stdin || null,
+          stdout: result.stdout || null,
+          stderr: result.stderr || null,
+          compileOutput: result.compile_output || null,
+          executionTime: executionTimeSeconds ? String(executionTimeSeconds) : null,
+          memoryUsage: memoryUsageKb,
+          submissionStatus: normalizedStatus.isSuccess
+            ? 'ACCEPTED'
+            : normalizedStatus.isCompilationError
+              ? 'COMPILATION_ERROR'
+              : normalizedStatus.isTimeLimitExceeded
+                ? 'TIME_LIMIT_EXCEEDED'
+                : 'RUNTIME_ERROR',
+          judge0Token: result.token || null,
+          isTestRun,
+        },
+      });
+      submissionId = submission.id;
+    }
 
     return {
-      submissionId: submission.id,
+      submissionId,
       token: result.token,
       status: normalizedStatus,
       stdout: result.stdout,
@@ -188,7 +196,7 @@ export class CodeExecutionService {
       executionTimeSeconds,
       memoryUsageKb,
       isTestRun,
-      executedAt: submission.createdAt.toISOString(),
+      executedAt: new Date().toISOString(),
     };
   }
 

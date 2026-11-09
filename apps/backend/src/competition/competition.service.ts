@@ -914,10 +914,31 @@ export class CompetitionService implements OnModuleInit {
     const createdTeams = [];
 
     await this.prisma.$transaction(async (tx) => {
-      // First clean up any previous demo teams
-      await tx.team.deleteMany({
-        where: { isDemo: true },
-      });
+      // First clean up any previous demo teams and their dependent records
+      const demoTeamIds = (
+        await tx.team.findMany({
+          where: { isDemo: true },
+          select: { id: true },
+        })
+      ).map((t) => t.id);
+
+      if (demoTeamIds.length > 0) {
+        await tx.submission.deleteMany({
+          where: { teamId: { in: demoTeamIds } },
+        });
+        await tx.teamRoundProgress.deleteMany({
+          where: { teamId: { in: demoTeamIds } },
+        });
+        await tx.teamSession.deleteMany({
+          where: { teamId: { in: demoTeamIds } },
+        });
+        await tx.participant.deleteMany({
+          where: { teamId: { in: demoTeamIds } },
+        });
+        await tx.team.deleteMany({
+          where: { id: { in: demoTeamIds } },
+        });
+      }
 
       for (let i = 0; i < count; i++) {
         const teamNum = (i + 1).toString().padStart(2, '0');
@@ -974,3 +995,4 @@ export class CompetitionService implements OnModuleInit {
     };
   }
 }
+
