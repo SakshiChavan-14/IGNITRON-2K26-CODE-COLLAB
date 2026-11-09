@@ -207,23 +207,32 @@ model TeamRoundProgress {
 model Submission {
   id               String           @id @default(cuid())
   teamId           String           @map("team_id")
-  roundId          String           @map("round_id")
+  roundId          String?          @map("round_id")
   language         String           @map("language")
   sourceCode       String           @db.LongText @map("source_code")
+  stdin            String?          @db.Text @map("stdin")
+  stdout           String?          @db.LongText @map("stdout")
+  stderr           String?          @db.LongText @map("stderr")
+  compileOutput    String?          @db.LongText @map("compile_output")
+  executionTime    Decimal?         @db.Decimal(8, 4) @map("execution_time")
+  memoryUsage      Int?             @map("memory_usage")
   submissionStatus SubmissionStatus @default(PENDING) @map("submission_status")
   score            Decimal?         @db.Decimal(6, 2) @map("score")
+  judge0Token      String?          @map("judge0_token")
+  isTestRun        Boolean          @default(false) @map("is_test_run")
   submittedAt      DateTime         @default(now()) @map("submitted_at")
   evaluatedAt      DateTime?        @map("evaluated_at")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
-  team        Team             @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  round       CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  team        Team              @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  round       CompetitionRound? @relation(fields: [roundId], references: [id], onDelete: Restrict)
   evaluations Evaluation[]
 
   @@index([teamId])
   @@index([roundId])
   @@index([submissionStatus])
+  @@index([isTestRun])
   @@map("submissions")
 }
 
