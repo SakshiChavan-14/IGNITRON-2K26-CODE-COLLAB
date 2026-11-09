@@ -474,3 +474,108 @@ export interface CompetitionActivityLogItem {
   metadata?: any;
   createdAt: string;
 }
+
+// ------------------------------------------------------------------------------
+// PHASE 05A: JUDGE0 CE & SECURE CODE EXECUTION
+// ------------------------------------------------------------------------------
+
+export const EXECUTION_LIMITS = {
+  MAX_SOURCE_CODE_SIZE_BYTES: 64 * 1024, // 64 KB
+  MAX_STDIN_SIZE_BYTES: 32 * 1024, // 32 KB
+  DEFAULT_CPU_TIME_LIMIT_SECONDS: 2.0,
+  MAX_CPU_TIME_LIMIT_SECONDS: 10.0,
+  DEFAULT_WALL_TIME_LIMIT_SECONDS: 5.0,
+  DEFAULT_MEMORY_LIMIT_KB: 128000, // 128 MB
+  MAX_MEMORY_LIMIT_KB: 256000, // 256 MB
+} as const;
+
+export interface SupportedLanguageItem {
+  id: number;
+  key: 'cpp' | 'java' | 'python' | 'javascript';
+  name: string;
+  version: string;
+  extension: string;
+  monacoLang: string;
+}
+
+export const OFFICIAL_JUDGE0_LANGUAGES: SupportedLanguageItem[] = [
+  {
+    id: 54,
+    key: 'cpp',
+    name: 'C++17 (GCC 9.2.0)',
+    version: '9.2.0',
+    extension: 'cpp',
+    monacoLang: 'cpp',
+  },
+  {
+    id: 62,
+    key: 'java',
+    name: 'Java (OpenJDK 13.0.1)',
+    version: '13.0.1',
+    extension: 'java',
+    monacoLang: 'java',
+  },
+  {
+    id: 71,
+    key: 'python',
+    name: 'Python 3 (3.8.1)',
+    version: '3.8.1',
+    extension: 'py',
+    monacoLang: 'python',
+  },
+  {
+    id: 63,
+    key: 'javascript',
+    name: 'JavaScript (Node.js 12.14.0)',
+    version: '12.14.0',
+    extension: 'js',
+    monacoLang: 'javascript',
+  },
+];
+
+export interface CodeExecutionRequestDto {
+  languageKey?: 'cpp' | 'java' | 'python' | 'javascript';
+  languageId?: number;
+  sourceCode: string;
+  stdin?: string;
+  isTestRun?: boolean;
+}
+
+export interface NormalizedExecutionStatus {
+  id: number;
+  description: string;
+  isSuccess: boolean;
+  isCompilationError: boolean;
+  isRuntimeError: boolean;
+  isTimeLimitExceeded: boolean;
+  isMemoryLimitExceeded: boolean;
+}
+
+export interface CodeExecutionResultDto {
+  submissionId?: string;
+  token?: string;
+  status: NormalizedExecutionStatus;
+  stdout: string | null;
+  stderr: string | null;
+  compileOutput: string | null;
+  executionTimeSeconds: number | null;
+  memoryUsageKb: number | null;
+  isTestRun: boolean;
+  executedAt: string;
+}
+
+export interface Judge0SubmissionResponse {
+  token: string;
+  stdout: string | null;
+  time: string | null;
+  memory: number | null;
+  stderr: string | null;
+  token_id?: string;
+  compile_output: string | null;
+  message: string | null;
+  status: {
+    id: number;
+    description: string;
+  };
+}
+
