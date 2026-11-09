@@ -1,0 +1,75 @@
+services:
+  server:
+    image: judge0/judge0:v1.13.1
+    container_name: ignitron-judge0-server
+    restart: always
+    privileged: true
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    ports:
+      - "2358:2358"
+    environment:
+      - VIRTUAL_HOST=localhost
+      - VIRTUAL_PORT=2358
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - ignitron-judge0-net
+
+  workers:
+    image: judge0/judge0:v1.13.1
+    container_name: ignitron-judge0-workers
+    command: ["./scripts/workers"]
+    restart: always
+    privileged: true
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - ignitron-judge0-net
+
+  db:
+    image: postgres:13.0
+    container_name: ignitron-judge0-db
+    restart: always
+    environment:
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: Judge0DbPass2026_Secured
+    volumes:
+      - judge0-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U judge0 -d judge0"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ignitron-judge0-net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: ignitron-judge0-redis
+    restart: always
+    command: ["redis-server", "--requirepass", "Judge0RedisPass2026_Secured"]
+    volumes:
+      - judge0-redis-data:/data
+    networks:
+      - ignitron-judge0-net
+
+volumes:
+  judge0-db-data:
+    name: ignitron-judge0-db-data
+  judge0-redis-data:
+    name: ignitron-judge0-redis-data
+
+networks:
+  ignitron-judge0-net:
+    name: ignitron-judge0-net
+    driver: bridge
