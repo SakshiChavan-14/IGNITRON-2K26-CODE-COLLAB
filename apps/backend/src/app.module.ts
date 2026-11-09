@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { CompetitionModule } from './competition/competition.module';
+import { CodeExecutionModule } from './code-execution/code-execution.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { CompetitionModule } from './competition/competition.module';
     AuthModule,
     AdminModule,
     CompetitionModule,
+    CodeExecutionModule,
   ],
 })
 export class AppModule {}
