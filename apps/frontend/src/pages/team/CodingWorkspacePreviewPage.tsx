@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Code2,
   Play,
@@ -11,12 +11,15 @@ import {
   Cpu,
   Loader2,
   Terminal,
+  Check,
 } from 'lucide-react';
 import { executionService } from '../../services/execution.service';
+import { workspaceService } from '../../services/workspace.service';
 import {
   CodeExecutionResultDto,
   SupportedLanguageItem,
   OFFICIAL_JUDGE0_LANGUAGES,
+  DEFAULT_STARTER_CODES,
 } from '@ignitron/shared';
 
 export const CodingWorkspacePreviewPage: React.FC = () => {
@@ -28,109 +31,95 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
   const [executionResult, setExecutionResult] = useState<CodeExecutionResultDto | null>(null);
   const [languages, setLanguages] = useState<SupportedLanguageItem[]>(OFFICIAL_JUDGE0_LANGUAGES);
 
-  const starterCodes: Record<string, string> = {
-    cpp: `// IGNITRON 2K26 — Code Relay Contestant Workspace
-// Challenge: C-301 Distributed Relay Cache Optimizer
-#include <iostream>
-#include <vector>
-#include <algorithm>
+  // Autosave State & Refs
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const versionRef = useRef<number>(0);
+  const lastSavedCodeRef = useRef<string>('');
+  const lastSavedLangRef = useRef<string>('');
+  const isInitialLoadedRef = useRef<boolean>(false);
 
-using namespace std;
+  const [code, setCode] = useState(DEFAULT_STARTER_CODES['cpp']);
 
-int main() {
-    ios_base::sync_with_stdio(false);
-    cin.tie(NULL);
-
-    int n, k;
-    if (!(cin >> n >> k)) {
-        cout << "RELAY_OPTIMIZED" << "\\n";
-        return 0;
-    }
-
-    vector<long long> latencies(n);
-    for (int i = 0; i < n; ++i) {
-        cin >> latencies[i];
-    }
-
-    // Output optimal relay confirmation
-    cout << "RELAY_OPTIMIZED (N=" << n << ", K=" << k << ")" << "\\n";
-
-    return 0;
-}`,
-    python: `# IGNITRON 2K26 — Code Relay Contestant Workspace
-# Challenge: C-301 Distributed Relay Cache Optimizer
-import sys
-
-def main():
-    raw = sys.stdin.read().split()
-    if not raw:
-        print("RELAY_OPTIMIZED")
-        return
-
-    n, k = int(raw[0]), int(raw[1])
-    latencies = [int(x) for x in raw[2:2+n]]
-
-    # Output optimal relay confirmation
-    print(f"RELAY_OPTIMIZED (N={n}, K={k})")
-
-if __name__ == '__main__':
-    main()`,
-    java: `// IGNITRON 2K26 — Code Relay Contestant Workspace
-// Challenge: C-301 Distributed Relay Cache Optimizer
-import java.util.*;
-import java.io.*;
-
-public class Solution {
-    public static void main(String[] args) throws IOException {
-        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-        StringTokenizer st = new StringTokenizer(br.readLine() == null ? "" : br.readLine());
-        if (!st.hasMoreTokens()) {
-            System.out.println("RELAY_OPTIMIZED");
-            return;
-        }
-
-        int n = Integer.parseInt(st.nextToken());
-        int k = Integer.parseInt(st.nextToken());
-
-        System.out.println("RELAY_OPTIMIZED (N=" + n + ", K=" + k + ")");
-    }
-}`,
-    javascript: `// IGNITRON 2K26 — Code Relay Contestant Workspace
-// Challenge: C-301 Distributed Relay Cache Optimizer
-const fs = require('fs');
-
-function main() {
-    const input = fs.readFileSync(0, 'utf-8').trim().split(/\\s+/);
-    if (!input || input.length < 2 || !input[0]) {
-        console.log("RELAY_OPTIMIZED");
-        return;
-    }
-
-    const n = parseInt(input[0], 10);
-    const k = parseInt(input[1], 10);
-
-    console.log(\`RELAY_OPTIMIZED (N=\${n}, K=\${k})\`);
-}
-
-main();`,
-  };
-
-  const [code, setCode] = useState(starterCodes['cpp']);
-
+  // 1. Initial Load: Fetch saved team draft and restore editor state
   useEffect(() => {
+    let isMounted = true;
+
+    // Load available languages
     executionService
       .getSupportedLanguages()
       .then((langs) => {
-        if (langs && langs.length > 0) setLanguages(langs);
+        if (isMounted && langs && langs.length > 0) setLanguages(langs);
       })
-      .catch(() => {
-        // Fallback to static languages if offline
+      .catch(() => {});
+
+    // Load saved team draft for Round 3
+    workspaceService
+      .getDraft(3)
+      .then((draft) => {
+        if (!isMounted) return;
+        setCode(draft.sourceCode);
+        setLanguage(draft.language as any);
+        versionRef.current = draft.version;
+        lastSavedCodeRef.current = draft.sourceCode;
+        lastSavedLangRef.current = draft.language;
+        isInitialLoadedRef.current = true;
+        setSaveStatus('saved');
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        isInitialLoadedRef.current = true;
+        console.warn('Could not load draft from backend (will use local template):', err.message);
       });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  // 2. Debounced Autosave: Save to backend after 800ms of inactivity
+  useEffect(() => {
+    if (!isInitialLoadedRef.current) return;
+
+    // Avoid unnecessary duplicate requests
+    if (
+      code === lastSavedCodeRef.current &&
+      language === lastSavedLangRef.current
+    ) {
+      return;
+    }
+
+    setSaveStatus('saving');
+    setSaveError(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const updated = await workspaceService.saveDraft({
+          sourceCode: code,
+          language,
+          roundNumber: 3,
+          expectedVersion: versionRef.current,
+        });
+
+        versionRef.current = updated.version;
+        lastSavedCodeRef.current = updated.sourceCode;
+        lastSavedLangRef.current = updated.language;
+        setSaveStatus('saved');
+      } catch (err: any) {
+        setSaveStatus('failed');
+        setSaveError(err?.message || 'Autosave failed');
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [code, language]);
 
   const handleLanguageChange = (newLang: 'cpp' | 'python' | 'java' | 'javascript') => {
     setLanguage(newLang);
-    setCode(starterCodes[newLang] || starterCodes['cpp']);
+    // If current code is identical to previous starter, switch to new starter
+    if (code === DEFAULT_STARTER_CODES[language]) {
+      setCode(DEFAULT_STARTER_CODES[newLang] || DEFAULT_STARTER_CODES['cpp']);
+    }
   };
 
   const handleRunCode = async (sampleStdin?: string) => {
@@ -138,7 +127,12 @@ main();`,
     setRunError(null);
     setActiveTab('output');
 
-    const stdinToUse = sampleStdin !== undefined ? sampleStdin : (activeTab === 'custom' ? customInput : '5 2\n1 3 2 4 9');
+    const stdinToUse =
+      sampleStdin !== undefined
+        ? sampleStdin
+        : activeTab === 'custom'
+          ? customInput
+          : '5 2\n1 3 2 4 9';
 
     try {
       const res = await executionService.runCode({
@@ -162,15 +156,15 @@ main();`,
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-sky-400 shrink-0" />
           <span>
-            <strong>JUDGE0 CE EXECUTION ACTIVATED:</strong> Interactive code execution and test runner connected to sandboxed Judge0 CE.
+            <strong>SHARED TEAM RELAY WORKSPACE:</strong> Persistent cloud drafts enabled. Code syncs across relay teammates automatically.
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono uppercase tracking-wider bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded border border-sky-500/30 font-semibold">
-            Phase 05A: Local Sandbox
+            Round 3 Active Buffer
           </span>
-          <span className="text-[10px] font-mono uppercase tracking-wider bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
-            Multi-Round Submissions Pending Phase 5B
+          <span className="text-[10px] font-mono uppercase tracking-wider bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">
+            Relay Synced
           </span>
         </div>
       </div>
@@ -254,25 +248,52 @@ main();`,
         <div className="lg:col-span-7 flex flex-col h-full bg-slate-950">
           {/* Editor Header Bar */}
           <div className="h-12 border-b border-slate-800 px-4 flex items-center justify-between bg-slate-900/60">
-            <div className="flex items-center gap-3">
-              <Code2 className="w-4 h-4 text-sky-400" />
-              <select
-                value={language}
-                onChange={(e) => handleLanguageChange(e.target.value as any)}
-                className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded text-xs font-mono text-slate-200 focus:outline-none focus:border-sky-500"
-              >
-                {languages.map((l) => (
-                  <option key={l.key} value={l.key}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-sky-400" />
+                <select
+                  value={language}
+                  onChange={(e) => handleLanguageChange(e.target.value as any)}
+                  className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded text-xs font-mono text-slate-200 focus:outline-none focus:border-sky-500"
+                >
+                  {languages.map((l) => (
+                    <option key={l.key} value={l.key}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Autosave Sync Status Pill */}
+              <div className="flex items-center gap-1.5 text-xs font-mono">
+                {saveStatus === 'saving' && (
+                  <span className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 text-[11px]">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Saving...</span>
+                  </span>
+                )}
+                {saveStatus === 'saved' && (
+                  <span className="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[11px]">
+                    <Check className="w-3 h-3" />
+                    <span>Team Draft Synced</span>
+                  </span>
+                )}
+                {saveStatus === 'failed' && (
+                  <span
+                    className="flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 text-[11px]"
+                    title={saveError || 'Save failed'}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>Save Failed</span>
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCode(starterCodes[language])}
-                title="Reset to template"
+                onClick={() => setCode(DEFAULT_STARTER_CODES[language])}
+                title="Reset to official template"
                 className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
