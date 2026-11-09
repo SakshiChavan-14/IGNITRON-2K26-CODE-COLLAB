@@ -1,15 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Code2,
   Play,
   Send,
   AlertTriangle,
   RotateCcw,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Cpu,
+  Loader2,
+  Terminal,
 } from 'lucide-react';
+import { executionService } from '../../services/execution.service';
+import {
+  CodeExecutionResultDto,
+  SupportedLanguageItem,
+  OFFICIAL_JUDGE0_LANGUAGES,
+} from '@ignitron/shared';
 
 export const CodingWorkspacePreviewPage: React.FC = () => {
-  const [language, setLanguage] = useState('cpp');
+  const [language, setLanguage] = useState<'cpp' | 'python' | 'java' | 'javascript'>('cpp');
   const [activeTab, setActiveTab] = useState<'sample' | 'custom' | 'output'>('sample');
+  const [customInput, setCustomInput] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [executionResult, setExecutionResult] = useState<CodeExecutionResultDto | null>(null);
+  const [languages, setLanguages] = useState<SupportedLanguageItem[]>(OFFICIAL_JUDGE0_LANGUAGES);
 
   const starterCodes: Record<string, string> = {
     cpp: `// IGNITRON 2K26 — Code Relay Contestant Workspace
@@ -25,15 +42,18 @@ int main() {
     cin.tie(NULL);
 
     int n, k;
-    if (!(cin >> n >> k)) return 0;
-
-    vector<long long> cache_latencies(n);
-    for (int i = 0; i < n; ++i) {
-        cin >> cache_latencies[i];
+    if (!(cin >> n >> k)) {
+        cout << "RELAY_OPTIMIZED" << "\\n";
+        return 0;
     }
 
-    // TODO: Implement optimal partition relay algorithm
-    cout << "RELAY_OPTIMIZED" << "\\n";
+    vector<long long> latencies(n);
+    for (int i = 0; i < n; ++i) {
+        cin >> latencies[i];
+    }
+
+    // Output optimal relay confirmation
+    cout << "RELAY_OPTIMIZED (N=" << n << ", K=" << k << ")" << "\\n";
 
     return 0;
 }`,
@@ -42,14 +62,16 @@ int main() {
 import sys
 
 def main():
-    lines = sys.stdin.read().split()
-    if not lines:
+    raw = sys.stdin.read().split()
+    if not raw:
+        print("RELAY_OPTIMIZED")
         return
-    n, k = int(lines[0]), int(lines[1])
-    latencies = [int(x) for x in lines[2:2+n]]
 
-    # TODO: Implement optimal partition relay algorithm
-    print("RELAY_OPTIMIZED")
+    n, k = int(raw[0]), int(raw[1])
+    latencies = [int(x) for x in raw[2:2+n]]
+
+    # Output optimal relay confirmation
+    print(f"RELAY_OPTIMIZED (N={n}, K={k})")
 
 if __name__ == '__main__':
     main()`,
@@ -62,37 +84,95 @@ public class Solution {
     public static void main(String[] args) throws IOException {
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
         StringTokenizer st = new StringTokenizer(br.readLine() == null ? "" : br.readLine());
-        if (!st.hasMoreTokens()) return;
+        if (!st.hasMoreTokens()) {
+            System.out.println("RELAY_OPTIMIZED");
+            return;
+        }
 
         int n = Integer.parseInt(st.nextToken());
         int k = Integer.parseInt(st.nextToken());
 
-        // TODO: Implement optimal partition relay algorithm
-        System.out.println("RELAY_OPTIMIZED");
+        System.out.println("RELAY_OPTIMIZED (N=" + n + ", K=" + k + ")");
     }
 }`,
+    javascript: `// IGNITRON 2K26 — Code Relay Contestant Workspace
+// Challenge: C-301 Distributed Relay Cache Optimizer
+const fs = require('fs');
+
+function main() {
+    const input = fs.readFileSync(0, 'utf-8').trim().split(/\\s+/);
+    if (!input || input.length < 2 || !input[0]) {
+        console.log("RELAY_OPTIMIZED");
+        return;
+    }
+
+    const n = parseInt(input[0], 10);
+    const k = parseInt(input[1], 10);
+
+    console.log(\`RELAY_OPTIMIZED (N=\${n}, K=\${k})\`);
+}
+
+main();`,
   };
 
   const [code, setCode] = useState(starterCodes['cpp']);
 
-  const handleLanguageChange = (newLang: string) => {
+  useEffect(() => {
+    executionService
+      .getSupportedLanguages()
+      .then((langs) => {
+        if (langs && langs.length > 0) setLanguages(langs);
+      })
+      .catch(() => {
+        // Fallback to static languages if offline
+      });
+  }, []);
+
+  const handleLanguageChange = (newLang: 'cpp' | 'python' | 'java' | 'javascript') => {
     setLanguage(newLang);
     setCode(starterCodes[newLang] || starterCodes['cpp']);
   };
 
+  const handleRunCode = async (sampleStdin?: string) => {
+    setIsRunning(true);
+    setRunError(null);
+    setActiveTab('output');
+
+    const stdinToUse = sampleStdin !== undefined ? sampleStdin : (activeTab === 'custom' ? customInput : '5 2\n1 3 2 4 9');
+
+    try {
+      const res = await executionService.runCode({
+        languageKey: language,
+        sourceCode: code,
+        stdin: stdinToUse,
+        isTestRun: true,
+      });
+      setExecutionResult(res);
+    } catch (err: any) {
+      setRunError(err?.message || 'Code execution failed. Please verify terminal session.');
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-4.1rem)] bg-slate-950 text-slate-100 overflow-hidden">
-      {/* Scope Disclaimer Banner */}
-      <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between text-xs text-amber-300">
+      {/* Execution Status Banner */}
+      <div className="bg-sky-500/10 border-b border-sky-500/20 px-4 py-2 flex items-center justify-between text-xs text-sky-300">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          <Terminal className="w-4 h-4 text-sky-400 shrink-0" />
           <span>
-            <strong>WORKSPACE PREVIEW:</strong> Coding Engine, Judge0 integration & test case runner will be activated in upcoming development phases.
+            <strong>JUDGE0 CE EXECUTION ACTIVATED:</strong> Interactive code execution and test runner connected to sandboxed Judge0 CE.
           </span>
         </div>
-        <span className="text-[10px] font-mono uppercase tracking-wider bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40">
-          UI Mockup Only
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-wider bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded border border-sky-500/30 font-semibold">
+            Phase 05A: Local Sandbox
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-wider bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
+            Multi-Round Submissions Pending Phase 5B
+          </span>
+        </div>
       </div>
 
       {/* Main Workspace Split View */}
@@ -115,9 +195,9 @@ public class Solution {
               Distributed Relay Cache Optimizer
             </h1>
             <div className="flex items-center gap-4 text-[11px] font-mono text-slate-400 mt-2">
-              <span>Time Limit: 1.0s</span>
+              <span>Time Limit: 2.0s</span>
               <span>•</span>
-              <span>Memory Limit: 256MB</span>
+              <span>Memory Limit: 128MB</span>
             </div>
           </div>
 
@@ -163,8 +243,8 @@ public class Solution {
                 <div>5 2<br />1 3 2 4 9</div>
               </div>
               <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block mb-1">Output</span>
-                <div>RELAY_OPTIMIZED</div>
+                <span className="text-[10px] text-slate-500 uppercase block mb-1">Expected Output</span>
+                <div>RELAY_OPTIMIZED (N=5, K=2)</div>
               </div>
             </div>
           </div>
@@ -178,12 +258,14 @@ public class Solution {
               <Code2 className="w-4 h-4 text-sky-400" />
               <select
                 value={language}
-                onChange={(e) => handleLanguageChange(e.target.value)}
+                onChange={(e) => handleLanguageChange(e.target.value as any)}
                 className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded text-xs font-mono text-slate-200 focus:outline-none focus:border-sky-500"
               >
-                <option value="cpp">C++ 17 (GCC 12)</option>
-                <option value="python">Python 3.11</option>
-                <option value="java">Java 17 (OpenJDK)</option>
+                {languages.map((l) => (
+                  <option key={l.key} value={l.key}>
+                    {l.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -198,11 +280,11 @@ public class Solution {
             </div>
           </div>
 
-          {/* Code Editor Mock Area */}
+          {/* Code Editor Area */}
           <div className="flex-1 relative flex overflow-hidden font-mono text-xs">
             {/* Line numbers gutter */}
             <div className="w-12 bg-slate-950 border-r border-slate-800/80 py-4 text-right pr-3 select-none text-slate-600 font-mono text-[11px] leading-relaxed">
-              {Array.from({ length: 24 }).map((_, i) => (
+              {Array.from({ length: 30 }).map((_, i) => (
                 <div key={i}>{i + 1}</div>
               ))}
             </div>
@@ -216,8 +298,8 @@ public class Solution {
             />
           </div>
 
-          {/* Bottom Test & Action Panel */}
-          <div className="h-52 border-t border-slate-800 bg-slate-900/80 flex flex-col">
+          {/* Bottom Execution & Action Panel */}
+          <div className="h-64 border-t border-slate-800 bg-slate-900/80 flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-800 px-4 h-10">
               <div className="flex items-center gap-2 text-xs font-medium">
                 <button
@@ -238,26 +320,47 @@ public class Solution {
                 </button>
                 <button
                   onClick={() => setActiveTab('output')}
-                  className={`px-3 py-1 rounded text-xs transition-colors ${
+                  className={`px-3 py-1 rounded text-xs transition-colors flex items-center gap-1.5 ${
                     activeTab === 'output' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  Execution Output
+                  <span>Execution Output</span>
+                  {executionResult && (
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        executionResult.status.isSuccess ? 'bg-emerald-400' : 'bg-rose-400'
+                      }`}
+                    />
+                  )}
                 </button>
               </div>
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => alert('Judge0 CE execution engine will be activated in upcoming development phases.')}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  onClick={() => handleRunCode()}
+                  disabled={isRunning}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
                 >
-                  <Play className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Run Sample Tests</span>
+                  {isRunning ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Executing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Run Sample Code</span>
+                    </>
+                  )}
                 </button>
 
                 <button
-                  onClick={() => alert('Code Relay official submission will be activated in upcoming development phases.')}
+                  onClick={() =>
+                    alert(
+                      'Official multi-stage Code Relay submission with automated judge scoring will be activated in upcoming development phases.',
+                    )
+                  }
                   className="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm shadow-sky-500/20"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -271,32 +374,152 @@ public class Solution {
               {activeTab === 'sample' && (
                 <div className="space-y-2">
                   <div className="p-2.5 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
-                    <span>Sample Test 1: (N=5, K=2)</span>
-                    <span className="text-[10px] text-emerald-400 font-bold uppercase bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      Sample Verified
-                    </span>
+                    <div>
+                      <span className="font-semibold text-slate-200 block">Sample 1: Basic Relay Test</span>
+                      <span className="text-[11px] text-slate-500 font-mono">Input: 5 2 \n 1 3 2 4 9</span>
+                    </div>
+                    <button
+                      onClick={() => handleRunCode('5 2\n1 3 2 4 9')}
+                      disabled={isRunning}
+                      className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded border border-slate-700 font-medium"
+                    >
+                      Run Case 1
+                    </button>
                   </div>
                   <div className="p-2.5 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
-                    <span>Sample Test 2: (N=10, K=4)</span>
-                    <span className="text-[10px] text-slate-500 uppercase">
-                      Ready to Run
-                    </span>
+                    <div>
+                      <span className="font-semibold text-slate-200 block">Sample 2: Multi-Stream Test</span>
+                      <span className="text-[11px] text-slate-500 font-mono">Input: 10 4 \n 12 4 19 2 8 3 10 22 5 1</span>
+                    </div>
+                    <button
+                      onClick={() => handleRunCode('10 4\n12 4 19 2 8 3 10 22 5 1')}
+                      disabled={isRunning}
+                      className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded border border-slate-700 font-medium"
+                    >
+                      Run Case 2
+                    </button>
                   </div>
                 </div>
               )}
 
               {activeTab === 'custom' && (
-                <textarea
-                  placeholder="Enter custom input lines here..."
-                  className="w-full h-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500 resize-none font-mono"
-                />
+                <div className="flex flex-col h-full space-y-2">
+                  <textarea
+                    value={customInput}
+                    onChange={(e) => setCustomInput(e.target.value)}
+                    placeholder="Enter custom stdin lines here..."
+                    className="flex-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500 resize-none font-mono"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => handleRunCode(customInput)}
+                      disabled={isRunning}
+                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold"
+                    >
+                      Execute with Custom Input
+                    </button>
+                  </div>
+                </div>
               )}
 
               {activeTab === 'output' && (
-                <div className="p-2.5 bg-slate-950 border border-slate-800 rounded text-slate-400">
-                  <span className="text-slate-500 block text-[11px] mb-1">Console Standard Output:</span>
-                  <div className="text-emerald-400 font-bold">RELAY_OPTIMIZED</div>
-                  <div className="text-[10px] text-slate-500 mt-2">Execution time: 42ms • Memory: 8.2MB</div>
+                <div className="space-y-3">
+                  {runError && (
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded text-rose-300 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block text-rose-200 font-semibold mb-0.5">Execution Rejected</strong>
+                        <span>{runError}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {isRunning && (
+                    <div className="flex items-center justify-center p-8 gap-3 text-slate-400">
+                      <Loader2 className="w-5 h-5 animate-spin text-sky-400" />
+                      <span>Sending payload to Judge0 CE isolate sandbox...</span>
+                    </div>
+                  )}
+
+                  {executionResult && !isRunning && (
+                    <div className="space-y-3">
+                      {/* Status header */}
+                      <div className="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800 rounded">
+                        <div className="flex items-center gap-2">
+                          {executionResult.status.isSuccess ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-rose-400" />
+                          )}
+                          <span
+                            className={`font-bold ${
+                              executionResult.status.isSuccess ? 'text-emerald-400' : 'text-rose-400'
+                            }`}
+                          >
+                            {executionResult.status.description}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-4 text-[11px] text-slate-400">
+                          {executionResult.executionTimeSeconds !== null && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-500" />
+                              {Math.round(executionResult.executionTimeSeconds * 1000)} ms
+                            </span>
+                          )}
+                          {executionResult.memoryUsageKb !== null && (
+                            <span className="flex items-center gap-1">
+                              <Cpu className="w-3.5 h-3.5 text-slate-500" />
+                              {(executionResult.memoryUsageKb / 1024).toFixed(1)} MB
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Compiler Output (if compilation error) */}
+                      {executionResult.compileOutput && (
+                        <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded space-y-1">
+                          <span className="text-[10px] text-rose-400 uppercase font-bold tracking-wider block">
+                            Compilation Diagnostics:
+                          </span>
+                          <pre className="text-rose-300 font-mono whitespace-pre-wrap text-xs overflow-x-auto">
+                            {executionResult.compileOutput}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Standard Error */}
+                      {executionResult.stderr && (
+                        <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded space-y-1">
+                          <span className="text-[10px] text-rose-400 uppercase font-bold tracking-wider block">
+                            Standard Error (stderr):
+                          </span>
+                          <pre className="text-rose-300 font-mono whitespace-pre-wrap text-xs overflow-x-auto">
+                            {executionResult.stderr}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Standard Output */}
+                      {executionResult.stdout && (
+                        <div className="p-3 bg-slate-950 border border-slate-800 rounded space-y-1">
+                          <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">
+                            Standard Output (stdout):
+                          </span>
+                          <pre className="text-emerald-400 font-mono whitespace-pre-wrap text-xs overflow-x-auto">
+                            {executionResult.stdout}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!isRunning && !executionResult && !runError && (
+                    <div className="text-center p-8 text-slate-500">
+                      <Terminal className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                      <p>Click "Run Sample Code" to compile and execute in the sandboxed isolate container.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
