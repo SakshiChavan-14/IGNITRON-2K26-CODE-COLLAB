@@ -9,6 +9,9 @@ import {
   Activity,
   Terminal,
   UserCheck,
+  FastForward,
+  BookOpen,
+  FileCode,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -46,6 +49,17 @@ export const Navbar: React.FC = () => {
         <nav className="hidden md:flex items-center gap-1">
           {user?.type === 'ADMIN' && (
             <>
+              <Link
+                to="/admin/competition"
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  isActive('/admin/competition')
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                    : 'text-amber-300 hover:text-amber-200 hover:bg-slate-800/50'
+                }`}
+              >
+                <FastForward className="w-4 h-4 text-amber-400" />
+                <span>Control Engine</span>
+              </Link>
               <Link
                 to="/admin/dashboard"
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -93,6 +107,30 @@ export const Navbar: React.FC = () => {
               Team Arena
             </Link>
           )}
+
+          <Link
+            to="/workspace-preview"
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              isActive('/workspace-preview')
+                ? 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <FileCode className="w-4 h-4 text-violet-400" />
+            <span>Workspace</span>
+          </Link>
+
+          <Link
+            to="/rules"
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              isActive('/rules')
+                ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-sky-400" />
+            <span>Rules</span>
+          </Link>
 
           <Link
             to="/status"
@@ -160,4 +198,3 @@ export const Navbar: React.FC = () => {
     </header>
   );
 };
-
