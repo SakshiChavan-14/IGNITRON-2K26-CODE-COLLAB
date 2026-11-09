@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { CompetitionModule } from './competition/competition.module';
 import { CodeExecutionModule } from './code-execution/code-execution.module';
+import { WorkspaceModule } from './workspace/workspace.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { CodeExecutionModule } from './code-execution/code-execution.module';
     AdminModule,
     CompetitionModule,
     CodeExecutionModule,
+    WorkspaceModule,
   ],
 })
 export class AppModule {}
