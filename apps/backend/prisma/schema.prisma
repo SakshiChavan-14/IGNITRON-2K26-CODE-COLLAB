@@ -80,6 +80,17 @@ enum SessionTerminationReason {
   DISPLACED
 }
 
+enum CompetitionStatus {
+  STANDBY
+  ROUND_1_ACTIVE
+  ROUND_1_EVALUATION
+  ROUND_2_ACTIVE
+  ROUND_2_EVALUATION
+  ROUND_3_ACTIVE
+  FINAL_EVALUATION
+  COMPLETED
+}
+
 // ------------------------------------------------------------------------------
 // A. TEAM
 // ------------------------------------------------------------------------------
@@ -91,6 +102,7 @@ model Team {
   passwordHash       String     @default("") @map("password_hash")
   mustChangePassword Boolean    @default(true) @map("must_change_password")
   isActive           Boolean    @default(true) @map("is_active")
+  isDemo             Boolean    @default(false) @map("is_demo")
   status             TeamStatus @default(ACTIVE)
   lastLoginAt        DateTime?  @map("last_login_at")
   createdAt          DateTime   @default(now()) @map("created_at")
@@ -278,4 +290,22 @@ model TeamSession {
   @@index([participantId, status])
   @@index([lastActivityAt])
   @@map("team_sessions")
+}
+
+// ------------------------------------------------------------------------------
+// J. COMPETITION STATE (Authoritative Global State Machine & Server Timer)
+// ------------------------------------------------------------------------------
+model CompetitionState {
+  id                       String            @id @default("global")
+  status                   CompetitionStatus @default(STANDBY)
+  currentRoundNumber       Int?              @map("current_round_number")
+  isPaused                 Boolean           @default(false) @map("is_paused")
+  startedAt                DateTime?         @map("started_at")
+  deadlineAt               DateTime?         @map("deadline_at")
+  pausedAt                 DateTime?         @map("paused_at")
+  remainingDurationSeconds  Int?              @map("remaining_duration_seconds")
+  totalDurationSeconds     Int?              @map("total_duration_seconds")
+  updatedAt                DateTime          @updatedAt @map("updated_at")
+
+  @@map("competition_state")
 }
