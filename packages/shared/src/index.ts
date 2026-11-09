@@ -6,7 +6,7 @@
 export const APPLICATION_METADATA = {
   name: 'IGNITRON 2K26',
   subtitle: 'CODE RELAY',
-  version: '1.0.0-phase03',
+  version: '1.0.0-phase04',
   author: 'IGNITRON Technical Committee',
 } as const;
 
@@ -17,6 +17,33 @@ export const SESSION_CONFIG = {
   MAX_PASSWORD_LENGTH: 128,
   MIN_PASSWORD_LENGTH: 8,
 } as const;
+
+export const OFFICIAL_ROUNDS_CONFIG = [
+  {
+    roundNumber: 1,
+    name: 'MCQ Arena',
+    description:
+      'Fast-paced algorithmic multiple-choice questions assessing core computer science, discrete math, and runtime complexity fundamentals.',
+    durationMinutes: 30,
+    maximumMarks: 30,
+  },
+  {
+    roundNumber: 2,
+    name: 'Bug Hunt Arena',
+    description:
+      'Code debugging and error isolation challenges across flawed real-world multi-language codebases.',
+    durationMinutes: 40,
+    maximumMarks: 100,
+  },
+  {
+    roundNumber: 3,
+    name: 'Final Boss Coding',
+    description:
+      'Complex multi-stage team code relay programming challenge against timed rigorous test suites.',
+    durationMinutes: 60,
+    maximumMarks: 100,
+  },
+] as const;
 
 // ------------------------------------------------------------------------------
 // COMMON API TYPES
@@ -91,6 +118,16 @@ export type SessionTerminationReason =
   | 'TIMEOUT'
   | 'ADMIN_REVOKED'
   | 'DISPLACED';
+
+export type CompetitionStatus =
+  | 'STANDBY'
+  | 'ROUND_1_ACTIVE'
+  | 'ROUND_1_EVALUATION'
+  | 'ROUND_2_ACTIVE'
+  | 'ROUND_2_EVALUATION'
+  | 'ROUND_3_ACTIVE'
+  | 'FINAL_EVALUATION'
+  | 'COMPLETED';
 
 // ------------------------------------------------------------------------------
 // AUTHENTICATION & SESSIONS
@@ -235,6 +272,7 @@ export interface TeamListItem {
   teamName: string;
   institution?: string | null;
   isActive: boolean;
+  isDemo?: boolean;
   status: TeamStatus;
   mustChangePassword: boolean;
   lastLoginAt?: string | null;
@@ -263,6 +301,8 @@ export interface DashboardStatsDto {
   inactiveTeams: number;
   totalParticipants: number;
   teamsWithActiveSessions: number;
+  currentCompetitionStatus: CompetitionStatus;
+  currentRoundNumber: number | null;
 }
 
 // ------------------------------------------------------------------------------
@@ -321,4 +361,116 @@ export interface CsvImportConfirmResult {
   importedCount: number;
   generatedCredentials: TeamCredentials[];
   activityLogId: string;
+}
+
+// ------------------------------------------------------------------------------
+// PHASE 04: GLOBAL COMPETITION CONTROL ENGINE & STATE MACHINE
+// ------------------------------------------------------------------------------
+
+export interface CompetitionStateDto {
+  id: string;
+  status: CompetitionStatus;
+  currentRoundNumber: number | null;
+  currentRoundName: string | null;
+  isPaused: boolean;
+  startedAt: string | null;
+  deadlineAt: string | null;
+  pausedAt: string | null;
+  remainingDurationSeconds: number | null;
+  totalDurationSeconds: number | null;
+  serverTime: string;
+  totalTeamsCount: number;
+  eligibleTeamsCount: number;
+  participatingTeamsCount: number;
+  completedTeamsCount: number;
+  validTransitions: string[];
+}
+
+export type RoundControlAction =
+  | 'START_ROUND_1'
+  | 'PAUSE_ROUND'
+  | 'RESUME_ROUND'
+  | 'END_ROUND'
+  | 'ENTER_EVALUATION'
+  | 'COMPLETE_EVALUATION'
+  | 'START_ROUND_2'
+  | 'START_ROUND_3'
+  | 'COMPLETE_COMPETITION'
+  | 'RESET_COMPETITION';
+
+export interface RoundControlDto {
+  action: RoundControlAction;
+  notes?: string;
+  resetType?: 'DEMO_ONLY' | 'FULL_RESET';
+}
+
+export interface ShortlistingTeamItem {
+  teamId: string;
+  teamCode: string;
+  teamName: string;
+  institution: string | null;
+  isDemo: boolean;
+  participants: Array<{ fullName: string; email: string }>;
+  currentRoundEligibility: EligibilityStatus;
+  nextRoundEligibility: EligibilityStatus;
+  participationStatus: ParticipationStatus;
+  score: number;
+  rank?: number;
+}
+
+export interface ShortlistSubmissionDto {
+  roundNumber: number; // e.g. 1 (qualifying for Round 2) or 2 (qualifying for Round 3)
+  qualifiedTeamIds: string[];
+  notes?: string;
+}
+
+export interface ShortlistSubmissionResult {
+  roundNumber: number;
+  totalProcessed: number;
+  qualifiedCount: number;
+  disqualifiedCount: number;
+  activityLogId: string;
+}
+
+export interface TeamRoundHistoryItem {
+  roundNumber: number;
+  roundName: string;
+  eligibilityStatus: EligibilityStatus;
+  participationStatus: ParticipationStatus;
+  score: number;
+  startedAt: string | null;
+  submittedAt: string | null;
+  evaluatedAt: string | null;
+}
+
+export interface TeamCompetitionStatusDto {
+  teamId: string;
+  teamCode: string;
+  teamName: string;
+  competitionStatus: CompetitionStatus;
+  currentRound: {
+    roundNumber: number;
+    name: string;
+    description: string;
+    durationMinutes: number;
+    maximumMarks: number;
+  } | null;
+  eligibilityStatus: EligibilityStatus;
+  participationStatus: ParticipationStatus;
+  isEligible: boolean;
+  deadlineAt: string | null;
+  serverTime: string;
+  isPaused: boolean;
+  remainingDurationSeconds: number | null;
+  roundHistory: TeamRoundHistoryItem[];
+}
+
+export interface CompetitionActivityLogItem {
+  id: string;
+  actorType: ActorType;
+  actorId: string | null;
+  action: string;
+  description: string;
+  metadata?: any;
+  createdAt: string;
 }
