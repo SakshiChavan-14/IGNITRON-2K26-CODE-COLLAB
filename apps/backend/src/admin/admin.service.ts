@@ -69,6 +69,7 @@ export class AdminService {
       inactiveTeams,
       totalParticipants,
       teamsWithActiveSessions,
+      compState,
     ] = await Promise.all([
       this.prisma.team.count(),
       this.prisma.team.count({ where: { isActive: true } }),
@@ -76,6 +77,9 @@ export class AdminService {
       this.prisma.participant.count(),
       this.prisma.teamSession.count({
         where: { status: 'ACTIVE' },
+      }),
+      this.prisma.competitionState.findUnique({
+        where: { id: 'global' },
       }),
     ]);
 
@@ -85,6 +89,8 @@ export class AdminService {
       inactiveTeams,
       totalParticipants,
       teamsWithActiveSessions,
+      currentCompetitionStatus: compState?.status || 'STANDBY',
+      currentRoundNumber: compState?.currentRoundNumber || null,
     };
   }
 
@@ -141,6 +147,7 @@ export class AdminService {
         teamName: team.teamName,
         institution: team.institution,
         isActive: team.isActive,
+        isDemo: team.isDemo,
         status: team.status as TeamStatus,
         mustChangePassword: team.mustChangePassword,
         lastLoginAt: team.lastLoginAt ? team.lastLoginAt.toISOString() : null,
@@ -294,6 +301,7 @@ export class AdminService {
       teamName: newTeam.teamName,
       institution: newTeam.institution,
       isActive: newTeam.isActive,
+      isDemo: newTeam.isDemo,
       status: newTeam.status as TeamStatus,
       mustChangePassword: newTeam.mustChangePassword,
       lastLoginAt: null,
