@@ -579,3 +579,114 @@ export interface Judge0SubmissionResponse {
   };
 }
 
+// ------------------------------------------------------------------------------
+// SHARED TEAM WORKSPACE DRAFTS
+// ------------------------------------------------------------------------------
+
+export interface WorkspaceDraftDto {
+  teamId: string;
+  roundNumber: number;
+  roundId: string;
+  sourceCode: string;
+  language: 'cpp' | 'java' | 'python' | 'javascript';
+  version: number;
+  lastEditedByParticipantId?: string | null;
+  updatedAt: string;
+  isStarterTemplate?: boolean;
+}
+
+export interface SaveWorkspaceDraftDto {
+  sourceCode: string;
+  language: 'cpp' | 'java' | 'python' | 'javascript';
+  roundNumber?: number;
+  expectedVersion?: number;
+}
+
+export const DEFAULT_STARTER_CODES: Record<string, string> = {
+  cpp: `// IGNITRON 2K26 — Code Relay Contestant Workspace
+// Challenge: C-301 Distributed Relay Cache Optimizer
+#include <iostream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+int main() {
+    ios_base::sync_with_stdio(false);
+    cin.tie(NULL);
+
+    int n, k;
+    if (!(cin >> n >> k)) {
+        cout << "RELAY_OPTIMIZED" << "\\n";
+        return 0;
+    }
+
+    vector<long long> latencies(n);
+    for (int i = 0; i < n; ++i) {
+        cin >> latencies[i];
+    }
+
+    // Output optimal relay confirmation
+    cout << "RELAY_OPTIMIZED (N=" << n << ", K=" << k << ")" << "\\n";
+
+    return 0;
+}`,
+  python: `# IGNITRON 2K26 — Code Relay Contestant Workspace
+# Challenge: C-301 Distributed Relay Cache Optimizer
+import sys
+
+def main():
+    raw = sys.stdin.read().split()
+    if not raw:
+        print("RELAY_OPTIMIZED")
+        return
+
+    n, k = int(raw[0]), int(raw[1])
+    latencies = [int(x) for x in raw[2:2+n]]
+
+    # Output optimal relay confirmation
+    print(f"RELAY_OPTIMIZED (N={n}, K={k})")
+
+if __name__ == '__main__':
+    main()`,
+  java: `// IGNITRON 2K26 — Code Relay Contestant Workspace
+// Challenge: C-301 Distributed Relay Cache Optimizer
+import java.util.*;
+import java.io.*;
+
+public class Solution {
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        StringTokenizer st = new StringTokenizer(br.readLine() == null ? "" : br.readLine());
+        if (!st.hasMoreTokens()) {
+            System.out.println("RELAY_OPTIMIZED");
+            return;
+        }
+
+        int n = Integer.parseInt(st.nextToken());
+        int k = Integer.parseInt(st.nextToken());
+
+        System.out.println("RELAY_OPTIMIZED (N=" + n + ", K=" + k + ")");
+    }
+}`,
+  javascript: `// IGNITRON 2K26 — Code Relay Contestant Workspace
+// Challenge: C-301 Distributed Relay Cache Optimizer
+const fs = require('fs');
+
+function main() {
+    const input = fs.readFileSync(0, 'utf-8').trim().split(/\\s+/);
+    if (!input || input.length < 2 || !input[0]) {
+        console.log("RELAY_OPTIMIZED");
+        return;
+    }
+
+    const n = parseInt(input[0], 10);
+    const k = parseInt(input[1], 10);
+
+    console.log(\`RELAY_OPTIMIZED (N=\${n}, K=\${k})\`);
+}
+
+main();`,
+};
+
+
