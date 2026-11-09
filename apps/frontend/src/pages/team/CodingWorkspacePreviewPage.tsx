@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Code2,
   Play,
@@ -13,6 +13,14 @@ import {
   Terminal,
   Check,
 } from 'lucide-react';
+import CodeMirror, { EditorView, keymap } from '@uiw/react-codemirror';
+import { cpp } from '@codemirror/lang-cpp';
+import { java } from '@codemirror/lang-java';
+import { python } from '@codemirror/lang-python';
+import { javascript } from '@codemirror/lang-javascript';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { indentWithTab } from '@codemirror/commands';
+
 import { executionService } from '../../services/execution.service';
 import { workspaceService } from '../../services/workspace.service';
 import {
@@ -21,6 +29,38 @@ import {
   OFFICIAL_JUDGE0_LANGUAGES,
   DEFAULT_STARTER_CODES,
 } from '@ignitron/shared';
+
+// Custom dark theme extension matching IGNITRON slate-950 UI styling
+const customDarkTheme = EditorView.theme({
+  '&': {
+    height: '100%',
+    backgroundColor: '#020617', // slate-950
+    fontSize: '12.5px',
+  },
+  '.cm-scroller': {
+    overflow: 'auto',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+    lineHeight: '1.6',
+  },
+  '.cm-gutters': {
+    backgroundColor: '#020617',
+    color: '#475569', // slate-600
+    borderRight: '1px solid #1e293b', // slate-800
+  },
+  '.cm-activeLine': {
+    backgroundColor: 'rgba(51, 65, 85, 0.25)', // slate-700/25
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'rgba(51, 65, 85, 0.35)',
+    color: '#94a3b8', // slate-400
+  },
+  '.cm-selectionMatch': {
+    backgroundColor: 'rgba(56, 189, 248, 0.2)', // sky-400/20
+  },
+  '&.cm-focused .cm-cursor': {
+    borderLeftColor: '#38bdf8', // sky-400
+  },
+});
 
 export const CodingWorkspacePreviewPage: React.FC = () => {
   const [language, setLanguage] = useState<'cpp' | 'python' | 'java' | 'javascript'>('cpp');
@@ -114,6 +154,36 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [code, language]);
 
+  // 3. Configure CodeMirror extensions based on active language
+  const extensions = useMemo(() => {
+    const langExtension = (() => {
+      switch (language) {
+        case 'cpp':
+          return cpp();
+        case 'java':
+          return java();
+        case 'python':
+          return python();
+        case 'javascript':
+          return javascript();
+        default:
+          return cpp();
+      }
+    })();
+
+    return [
+      langExtension,
+      oneDark,
+      customDarkTheme,
+      keymap.of([indentWithTab]),
+    ];
+  }, [language]);
+
+  // Code change handler with stable reference
+  const handleCodeChange = useCallback((value: string) => {
+    setCode(value);
+  }, []);
+
   const handleLanguageChange = (newLang: 'cpp' | 'python' | 'java' | 'javascript') => {
     setLanguage(newLang);
     // If current code is identical to previous starter, switch to new starter
@@ -156,7 +226,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-sky-400 shrink-0" />
           <span>
-            <strong>SHARED TEAM RELAY WORKSPACE:</strong> Persistent cloud drafts enabled. Code syncs across relay teammates automatically.
+            <strong>CODEMIRROR 6 ACTIVE:</strong> Real-time syntax highlighting, bracket matching, indentation & persistent cloud drafts.
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -244,7 +314,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Code Editor & Execution Panel (7 columns) */}
+        {/* Right Column: CodeMirror 6 Editor & Execution Panel (7 columns) */}
         <div className="lg:col-span-7 flex flex-col h-full bg-slate-950">
           {/* Editor Header Bar */}
           <div className="h-12 border-b border-slate-800 px-4 flex items-center justify-between bg-slate-900/60">
@@ -301,21 +371,40 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Code Editor Area */}
-          <div className="flex-1 relative flex overflow-hidden font-mono text-xs">
-            {/* Line numbers gutter */}
-            <div className="w-12 bg-slate-950 border-r border-slate-800/80 py-4 text-right pr-3 select-none text-slate-600 font-mono text-[11px] leading-relaxed">
-              {Array.from({ length: 30 }).map((_, i) => (
-                <div key={i}>{i + 1}</div>
-              ))}
-            </div>
-
-            {/* Editor Textarea */}
-            <textarea
+          {/* CodeMirror 6 Integrated Editor Container */}
+          <div className="flex-1 relative flex overflow-hidden font-mono text-xs bg-slate-950">
+            <CodeMirror
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              spellCheck={false}
-              className="flex-1 bg-slate-950 text-slate-200 p-4 focus:outline-none resize-none font-mono text-xs leading-relaxed selection:bg-sky-500/30 overflow-y-auto"
+              height="100%"
+              extensions={extensions}
+              onChange={handleCodeChange}
+              basicSetup={{
+                lineNumbers: true,
+                highlightActiveLineGutter: true,
+                highlightSpecialChars: true,
+                history: true,
+                foldGutter: true,
+                drawSelection: true,
+                dropCursor: true,
+                allowMultipleSelections: true,
+                indentOnInput: true,
+                syntaxHighlighting: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                rectangularSelection: true,
+                crosshairCursor: true,
+                highlightActiveLine: true,
+                highlightSelectionMatches: true,
+                closeBracketsKeymap: true,
+                defaultKeymap: true,
+                searchKeymap: true,
+                historyKeymap: true,
+                foldKeymap: true,
+                completionKeymap: true,
+                lintKeymap: true,
+              }}
+              className="h-full w-full overflow-hidden"
             />
           </div>
 
