@@ -112,6 +112,7 @@ model Team {
   roundProgress TeamRoundProgress[]
   submissions   Submission[]
   sessions      TeamSession[]
+  drafts        WorkspaceDraft[]
 
   @@map("teams")
 }
@@ -172,6 +173,7 @@ model CompetitionRound {
 
   teamProgress TeamRoundProgress[]
   submissions  Submission[]
+  drafts       WorkspaceDraft[]
 
   @@map("competition_rounds")
 }
@@ -317,4 +319,27 @@ model CompetitionState {
   updatedAt                DateTime          @updatedAt @map("updated_at")
 
   @@map("competition_state")
+}
+
+// ------------------------------------------------------------------------------
+// K. WORKSPACE DRAFT (Persistent Shared Team Coding Workspace)
+// ------------------------------------------------------------------------------
+model WorkspaceDraft {
+  id                        String           @id @default(cuid())
+  teamId                    String           @map("team_id")
+  roundId                   String           @map("round_id")
+  sourceCode                String           @db.LongText @map("source_code")
+  language                  String           @map("language")
+  version                   Int              @default(1) @map("version")
+  lastEditedByParticipantId String?          @map("last_edited_by_participant_id")
+  createdAt                 DateTime         @default(now()) @map("created_at")
+  updatedAt                 DateTime         @updatedAt @map("updated_at")
+
+  team                      Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  round                     CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
+
+  @@unique([teamId, roundId])
+  @@index([teamId])
+  @@index([roundId])
+  @@map("workspace_drafts")
 }
