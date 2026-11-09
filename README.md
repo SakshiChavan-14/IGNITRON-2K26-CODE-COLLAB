@@ -1,54 +1,71 @@
 # IGNITRON 2K26 — CODE RELAY
 
-> Production-oriented competitive programming platform engineered for university team code relay competitions.
+> Production-grade competitive programming tournament platform engineered for offline university team code relay competitions.
 
 ---
 
 ## 1. Project Overview
 
-**IGNITRON 2K26 — Code Relay** is a competitive programming event platform built to orchestrate real-time, multi-team coding relay tournaments (20+ teams). During the competition, team members take turns writing, debugging, and passing code to solve algorithmic challenges across multiple progressive rounds under strict time constraints.
+**IGNITRON 2K26 — Code Relay** is a specialized competitive programming platform designed to orchestrate real-time, multi-team coding relay tournaments (20+ teams). During the competition, team members take turns writing, debugging, and passing code to solve algorithmic challenges across multiple progressive rounds under strict time constraints.
 
-The platform is designed to operate seamlessly over a local area network (LAN) hosted on a dedicated competition machine (Dell G15 laptop) without external cloud or internet dependencies.
+The platform is designed to operate seamlessly over a local area network (LAN) hosted on a dedicated workstation server (Dell G15 laptop) without external cloud or internet dependencies during live tournament events.
 
 ---
 
-## 2. Project Objectives
+## 2. Key Features
 
-- **High Reliability in Offline/LAN Environments**: Zero hard dependencies on external paid SaaS or internet services during the live competition.
-- **Strict Anti-Malpractice & Observability**: Real-time status polling, active team monitoring, and submission evaluation.
-- **Predictable Local Performance**: Lean, responsive architecture designed to run on a local workstation server with minimal overhead.
-- **Extensible Monorepo Architecture**: Clean separation between frontend, backend, and shared domain logic using TypeScript and npm workspaces.
+- **External Registration & Secure Account Management:**
+  - Import external participant rosters via dynamic Unstop CSV column mapping.
+  - Automatic generation of secure temporary team credentials with forced first-login password updates.
+- **Single-Active-Participant Session Mutex:**
+  - Strict database-backed session lock preventing simultaneous logins by multiple team members.
+  - Smooth relay handovers between team members with immediate mutex release on logout.
+- **Authoritative Competition Control Engine:**
+  - 8-stage state machine (`STANDBY` &rarr; `ROUND_1` &rarr; `ROUND_1_EVALUATION` &rarr; `ROUND_2` &rarr; `ROUND_2_EVALUATION` &rarr; `ROUND_3` &rarr; `FINAL_EVALUATION` &rarr; `COMPLETED`).
+  - Server-authoritative timer synchronized to backend clocks, preventing client manipulation.
+  - Pause and resume controls that preserve exact remaining duration.
+  - Progressive team shortlisting (Top 50% advance from Round 1 to Round 2; finalists advance to Round 3).
+- **Persistent Shared Team Workspace:**
+  - Integrated **CodeMirror 6** editor with syntax highlighting for C++17, Java, Python, and JavaScript.
+  - Line numbers, bracket matching, active line highlighting, tab indentation, and dark theme.
+  - Debounced autosave (~800ms) with optimistic concurrency version conflict detection (HTTP 409).
+  - Seamless Relay handover: Participant A writes & saves code, logs out; Participant B logs in and sees identical code and language state.
+- **Code Execution Sandbox:**
+  - Self-hosted **Judge0 CE** integration via local Docker Compose.
+  - Synchronous compilation, execution, and error diagnostics for C++, Java, Python, and JavaScript.
+  - CPU, wall-clock, and memory limit enforcement with automated development fallback.
 
 ---
 
 ## 3. Technology Stack
 
 ### Frontend (`apps/frontend`)
-- **Framework**: React 18
-- **Build Tool**: Vite 6
-- **Language**: TypeScript (Strict Mode)
-- **Styling**: Tailwind CSS
-- **Routing**: React Router DOM (v6)
-- **Data Fetching / State**: TanStack Query (v5) — HTTP polling architecture
-- **Editor**: CodeMirror 6 *(planned for Phase 04)*
+- **Framework:** React 18 (SPA)
+- **Build Tool:** Vite 6
+- **Language:** TypeScript 5 (Strict Mode)
+- **Styling:** Tailwind CSS + PostCSS
+- **Routing:** React Router DOM (v6)
+- **State & Data Fetching:** TanStack Query (v5)
+- **Code Editor:** CodeMirror 6 (`@uiw/react-codemirror`)
+- **Icons:** Lucide React
 
 ### Backend (`apps/backend`)
-- **Framework**: NestJS 10 (Modular Monolith)
-- **Language**: TypeScript
-- **Architecture**: REST API with global `/api` prefix, centralized error filters, and logging interceptors
-- **Configuration**: `@nestjs/config`
-- **Database Client**: Prisma ORM 6 (`@prisma/client`)
-
-### Shared Domain Package (`packages/shared`)
-- **Package**: `@ignitron/shared`
-- Contains common API contracts, DTO types, and application metadata shared across frontend and backend.
+- **Framework:** NestJS 10 (Modular Monolith)
+- **Language:** TypeScript 5
+- **Architecture:** REST APIs with global `/api` prefix, centralized error filters, and interceptors
+- **Authentication:** Passport JWT with role-based access guards and `HttpOnly` cookie tokens
+- **Configuration:** `@nestjs/config`
+- **Database ORM:** Prisma ORM 6 (`@prisma/client`)
 
 ### Database (`infrastructure/mysql`)
-- **Engine**: MySQL 8.0 Community Edition
-- **ORM**: Prisma ORM with automated migrations and seeders
+- **Engine:** MySQL 8.0 Community Edition
+- **Migration & Schema:** Prisma Migrations with versioned migration history and idempotent seeds
 
-### Code Execution Worker *(Later Phase)*
-- Judge0 CE (Self-hosted via Docker Compose)
+### Code Execution Engine (`infrastructure/judge0`)
+- **Engine:** Judge0 CE (v1.13.1) deployed via Docker Compose (Server, Workers, PostgreSQL, Redis)
+
+### Shared Package (`packages/shared`)
+- Common TypeScript types, DTO contracts, language definitions, and competition metadata shared across frontend and backend.
 
 ---
 
@@ -56,211 +73,148 @@ The platform is designed to operate seamlessly over a local area network (LAN) h
 
 ```text
 IGNITRON-2K26/
-│
 ├── apps/
-│   ├── frontend/                 # React 18 + Vite SPA
-│   │   ├── public/               # Public assets
+│   ├── frontend/                     # React 18 + Vite SPA
 │   │   ├── src/
-│   │   │   ├── assets/           # Static media assets
-│   │   │   ├── components/       # Reusable UI components (StatusBadge, etc.)
-│   │   │   ├── layouts/          # Root application layouts
-│   │   │   ├── pages/            # View pages (StatusPage with live DB check)
-│   │   │   ├── hooks/            # Custom hooks (useHealth with TanStack Query)
-│   │   │   ├── services/         # Centralized API service layer (apiClient, healthService)
-│   │   │   ├── types/            # Frontend specific types
-│   │   │   ├── utils/            # Helper utilities
-│   │   │   ├── styles/           # Tailwind globals
-│   │   │   ├── App.tsx           # Router & QueryClient setup
-│   │   │   └── main.tsx          # Application entrypoint
-│   │   ├── index.html
+│   │   │   ├── components/           # Reusable UI components (Navbar, StatusBadge, ProtectedRoute)
+│   │   │   ├── context/              # AuthContext (JWT & session lifecycle)
+│   │   │   ├── hooks/                # Custom hooks (useCompetition, useHealth)
+│   │   │   ├── layouts/              # Root layout & page wrappers
+│   │   │   ├── pages/                # Admin & Team views
+│   │   │   │   ├── admin/            # Dashboard, Competition Control, Teams, CSV Import
+│   │   │   │   └── team/             # Team Dashboard, Coding Workspace Preview
+│   │   │   ├── services/             # API services (auth, admin, competition, workspace, execution)
+│   │   │   ├── styles/               # Tailwind globals
+│   │   │   ├── App.tsx               # Route definitions
+│   │   │   └── main.tsx              # React DOM entry point
 │   │   ├── package.json
-│   │   ├── vite.config.ts        # Vite config with /api proxy to backend
-│   │   └── tsconfig.json
+│   │   └── vite.config.ts
 │   │
-│   └── backend/                  # NestJS Modular Monolithic Server
-│       ├── prisma/               # Database schema & migrations
-│       │   ├── schema.prisma     # 8 core relational competition models
-│       │   ├── seed.ts           # Idempotent official competition round seeder
-│       │   └── migrations/       # Versioned migration SQL files
+│   └── backend/                      # NestJS REST API Server
+│       ├── prisma/
+│       │   ├── schema.prisma         # Relational database schema
+│       │   ├── seed.ts               # Official competition rounds seeder
+│       │   └── migrations/           # Versioned migration history
 │       ├── src/
-│       │   ├── common/           # Cross-cutting concerns (filters, interceptors)
-│       │   ├── config/           # Environment config loader
-│       │   ├── database/         # PrismaService and DatabaseModule
-│       │   ├── health/           # System health & dynamic DB readiness
-│       │   ├── app.module.ts     # Root NestJS module
-│       │   └── main.ts           # Server bootstrap (Port 4000)
-│       ├── nest-cli.json
-│       ├── package.json
-│       └── tsconfig.json
+│       │   ├── admin/                # Admin management & CSV import
+│       │   ├── auth/                 # JWT auth & session mutex enforcement
+│       │   ├── code-execution/       # Judge0 client & execution dispatcher
+│       │   ├── common/               # Filters, interceptors, decorators
+│       │   ├── competition/          # State machine, timers & shortlisting
+│       │   ├── config/               # Environment configuration
+│       │   ├── database/             # PrismaService & DatabaseModule
+│       │   ├── health/               # Health probe endpoints
+│       │   ├── workspace/            # Team workspace drafts & autosave
+│       │   ├── app.module.ts         # Root NestJS module
+│       │   └── main.ts               # Server bootstrap entry point
+│       └── package.json
 │
 ├── packages/
-│   └── shared/                   # Common TypeScript package
+│   └── shared/                       # Shared domain types & contracts
 │       ├── src/
-│       │   └── index.ts          # Shared types & metadata
-│       ├── package.json
-│       └── tsconfig.json
+│       │   └── index.ts              # Exported types & constants
+│       └── package.json
 │
-├── infrastructure/               # Local hosting infrastructure
-│   ├── mysql/                    # Local MySQL Docker Compose configuration
-│   └── judge0/                   # Reserved for Judge0 CE deployment
+├── infrastructure/
+│   ├── mysql/                        # Optional MySQL Docker Compose
+│   └── judge0/                       # Judge0 CE Docker Compose & config
+│       ├── docker-compose.yml
+│       ├── judge0.conf
+│       └── README.md
 │
-├── docs/                         # Architecture documentation
-├── scripts/
-│   ├── validate-phase02.cjs      # Automated integration verification suite
-│   └── test-database.cjs         # Automated database architecture test suite
-├── .gitignore                    # Root gitignore rules
-├── .env.example                  # Environment template
-├── package.json                  # Monorepo workspaces & root scripts
-├── tsconfig.base.json            # Shared TypeScript configuration
-└── README.md                     # Comprehensive documentation
+├── docs/                             # Project documentation
+│   ├── architecture.md               # Monorepo architecture overview
+│   ├── PROJECT_STATUS.md             # Detailed implementation & test status
+│   └── DELL-G15-HANDOFF.md           # Step-by-step Dell G15 setup guide
+│
+├── scripts/                          # Automated verification suites
+│   ├── test-database.cjs             # Database connectivity & seed check
+│   ├── test-phase03.cjs              # Auth & session mutex test suite
+│   ├── test-phase04.cjs              # State machine & timer test suite
+│   ├── test-phase05a.cjs             # Judge0 execution test suite
+│   └── test-workspace-draft.cjs      # Shared workspace & handover suite
+│
+├── .env.example                      # Root environment template
+├── .gitignore                        # Git exclusion rules
+├── package.json                      # Monorepo root configuration
+└── tsconfig.base.json                # Base TypeScript configuration
 ```
 
 ---
 
-## 5. Database Architecture (Phase 02)
+## 5. Quickstart & Installation
 
-The database schema is normalized and indexed for high-concurrency competition access:
+### Prerequisites
+- **Node.js:** v20 LTS or v22 LTS
+- **npm:** v10+
+- **MySQL:** 8.0 Community Edition (running locally on port 3306)
+- **Docker Desktop:** (Required for real Judge0 CE code execution)
 
-| Model | Table | Purpose | Key Relations & Constraints |
-|---|---|---|---|
-| `Team` | `teams` | Registered competition teams | Unique `team_code`, 1:N `participants`, 1:N `roundProgress`, 1:N `submissions` |
-| `Participant` | `participants` | Students belonging to a team (2 per team) | Unique `email`, FK `team_id` (Cascade delete with team) |
-| `AdminAccount` | `admin_accounts` | Competition administrators & judges | Unique `email`, Role enum (`SUPER_ADMIN`, `ORGANIZER`, `JUDGE`) |
-| `CompetitionRound` | `competition_rounds` | The 3 competition stages | Unique `round_number`, 1:N `teamProgress`, 1:N `submissions` |
-| `TeamRoundProgress` | `team_round_progress` | Team progress per round | Unique `(team_id, round_id)`, status enums, scores |
-| `Submission` | `submissions` | Team code submissions | FK `team_id`, FK `round_id`, 1:N `evaluations` |
-| `Evaluation` | `evaluations` | Judge evaluations & scores | FK `submission_id`, FK `evaluator_id` (SetNull) |
-| `ActivityLog` | `activity_logs` | Audit trail & malpractice tracking | Indexed `actor_type`, `action`, `created_at` |
+### 1. Clone & Install
+```powershell
+git clone <PRIVATE_GITHUB_REPO_URL> IGNITRON-2K26
+cd IGNITRON-2K26
 
-### Official Competition Rounds (Pre-seeded):
-1. **Round 1 — MCQ Arena**: 30 minutes, 30 max marks.
-2. **Round 2 — Bug Hunt Arena**: 40 minutes, 100 max marks.
-3. **Round 3 — Final Boss Coding**: 60 minutes, 100 max marks.
-
----
-
-## 6. Installation Prerequisites
-
-Ensure the following tools are installed on the development machine:
-
-- **Node.js**: `v20.x` or higher (verified on Node `v24.x`)
-- **npm**: `v10.x` or higher
-- **MySQL Server 8.0**: Local native install OR Docker Desktop
-
----
-
-## 7. Database Setup Instructions
-
-### Option A: Local Docker Compose (Recommended)
-
-If Docker Desktop is installed, run from the project root:
-
-```bash
-docker compose -f infrastructure/mysql/docker-compose.yml up -d
+# Install dependencies across all monorepo workspaces
+npm install
 ```
 
-This starts MySQL 8.0 on port 3306 with:
-- Database: `ignitron_2k26`
-- User: `ignitron_user`
-- Password: `ignitron_pass`
-
-Set in `.env`:
-```env
-DATABASE_URL="mysql://ignitron_user:ignitron_pass@localhost:3306/ignitron_2k26"
+### 2. Environment Configuration
+Copy the template file to `.env`:
+```powershell
+cp .env.example .env
 ```
 
-### Option B: Native MySQL Server
+Configure `.env` with your local settings (database credentials, JWT secret, admin password).
 
-If using native MySQL 8.0 on Windows:
-1. Open MySQL Command Line Client or MySQL Workbench as `root`.
-2. Run:
-```sql
-CREATE DATABASE IF NOT EXISTS ignitron_2k26 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'ignitron_user'@'localhost' IDENTIFIED BY 'ignitron@2026';
-GRANT ALL PRIVILEGES ON ignitron_2k26.* TO 'ignitron_user'@'localhost';
-FLUSH PRIVILEGES;
-```
-3. Set in `.env`:
-```env
-# Note: '@' in passwords MUST be URL-encoded as '%40' for Prisma:
-DATABASE_URL="mysql://ignitron_user:ignitron%402026@localhost:3306/ignitron_2k26"
-```
-
----
-
-## 8. Database Migration & Seeding
-
-After configuring `.env`:
-
-```bash
-# Apply migrations to database
+### 3. Database Initialization
+```powershell
+# Deploy database migrations to MySQL
 npm run db:deploy
 
-# Or for local schema development:
-npm run db:migrate
-
-# Seed official competition rounds (idempotent)
+# Seed official competition rounds
 npm run db:seed
+```
 
-# Run database architecture automated tests
-npm run test:db
+### 4. (Optional) Start Judge0 Code Execution Sandbox
+```powershell
+cd infrastructure/judge0
+docker compose up -d
+cd ../..
 ```
 
 ---
 
-## 9. Development Commands
+## 6. Development & Run Commands
 
-The root package manages all workspace lifecycle commands:
-
-| Command | Description |
-|---|---|
-| `npm run dev` | **Recommended**: Compiles shared package and concurrently boots Backend and Frontend. |
-| `npm run dev:frontend` | Starts only the Vite React frontend. |
-| `npm run dev:backend` | Starts only the NestJS backend in watch mode. |
-| `npm run build` | Builds shared package, NestJS backend, and Vite frontend for production. |
-| `npm run lint` | Runs TypeScript type checking across all workspaces. |
-| `npm run validate` | Runs the automated end-to-end integration verification suite. |
-| `npm run db:generate` | Generates the Prisma Client. |
-| `npm run db:migrate` | Runs Prisma development migrations. |
-| `npm run db:deploy` | Applies pending migrations to the active database. |
-| `npm run db:seed` | Seeds the official competition round definitions. |
-| `npm run db:studio` | Opens Prisma Studio GUI in the browser. |
-| `npm run test:db` | Runs automated database tests (relations, constraints, seeding). |
+| Command | Action |
+| :--- | :--- |
+| `npm run dev` | Builds shared package and concurrently runs backend (`:4000`) and frontend (`:5173`) |
+| `npm run dev:backend` | Runs only the NestJS backend in watch mode |
+| `npm run dev:frontend` | Runs only the Vite frontend dev server |
+| `npm run build` | Compiles shared library, backend (`nest build`), and frontend (`vite build`) |
+| `npm run lint` | Runs TypeScript type checking across all workspaces (`tsc --noEmit`) |
+| `npm run db:deploy` | Applies pending Prisma migrations to the target database |
+| `npm run db:seed` | Seeds official competition rounds |
+| `npm run db:studio` | Opens Prisma Studio visual database inspector |
+| `npm run test:db` | Verifies database connectivity and round seeding |
 
 ---
 
-## 10. Health & Readiness API
+## 7. Application Access
 
-### Liveness Endpoint
-- **URL**: `GET /api/health`
-- **Status Code**: `200 OK`
-- Verifies backend process liveness without requiring a database connection.
-
-### Readiness Endpoint
-- **URL**: `GET /api/health/ready`
-- **Status Code**: `200 OK` (when database is connected) or `503 Service Unavailable` (when database is offline)
-- **Response Format**:
-```json
-{
-  "status": "ready",
-  "application": "IGNITRON 2K26",
-  "service": "backend",
-  "timestamp": "2026-11-03T05:55:05.580Z",
-  "checks": {
-    "api": "ok",
-    "database": "connected"
-  }
-}
-```
+Once started:
+- **Public Landing Page:** `http://localhost:5173`
+- **Team Login:** `http://localhost:5173/team/login`
+- **Admin Login:** `http://localhost:5173/admin/login`
+- **Backend API Base:** `http://localhost:4000/api`
+- **Health Endpoint:** `http://localhost:4000/api/health`
 
 ---
 
-## 11. Troubleshooting Common Database Issues
+## 8. Detailed Guides
 
-1. **Authentication failed (`P1000`)**:
-   - Verify credentials in `.env`.
-   - If the password contains `@` (e.g. `ignitron@2026`), encode it as `%40` (`ignitron%402026`).
-2. **Database does not exist (`P1003`)**:
-   - Create the database: `CREATE DATABASE ignitron_2k26;` or run `npm run db:deploy`.
-3. **Connection refused (`ECONNREFUSED 127.0.0.1:3306`)**:
-   - Ensure the MySQL Windows service is started or start the Docker container via `docker compose -f infrastructure/mysql/docker-compose.yml up -d`.
+For in-depth operational procedures, consult:
+- **[DELL-G15-HANDOFF.md](docs/DELL-G15-HANDOFF.md):** Complete Windows, MySQL, Docker, and LAN setup walkthrough.
+- **[PROJECT_STATUS.md](docs/PROJECT_STATUS.md):** Comprehensive phase deliverables, test results, and roadmap.
+- **[infrastructure/judge0/README.md](infrastructure/judge0/README.md):** Detailed Judge0 configuration and execution limits.
