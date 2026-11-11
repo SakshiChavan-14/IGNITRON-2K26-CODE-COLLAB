@@ -2,6 +2,8 @@ import {
   AdminLoginDto,
   TeamLoginDto,
   ChangePasswordDto,
+  RegisterTeamDto,
+  RegisterTeamResponse,
   AuthUser,
   AuthAdminUser,
   AuthTeamUser,
@@ -10,6 +12,17 @@ import {
 import { apiClient } from './api';
 
 export const authService = {
+  async registerTeam(dto: RegisterTeamDto): Promise<RegisterTeamResponse> {
+    const res = await apiClient<{ success: boolean; data: RegisterTeamResponse }>(
+      '/auth/team/register',
+      {
+        method: 'POST',
+        body: JSON.stringify(dto),
+      },
+    );
+    return res.data;
+  },
+
   async adminLogin(dto: AdminLoginDto): Promise<AuthAdminUser> {
     const res = await apiClient<{ success: boolean; user: AuthAdminUser }>(
       '/auth/admin/login',
