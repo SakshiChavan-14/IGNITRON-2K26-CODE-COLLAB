@@ -21,7 +21,7 @@ export const Navbar: React.FC = () => {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/', { replace: true });
   };
 
   const isActive = (path: string) => location.pathname === path;
@@ -85,29 +85,30 @@ export const Navbar: React.FC = () => {
           )}
 
           {user?.type === 'TEAM' && (
-            <Link
-              to="/team/dashboard"
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                isActive('/team/dashboard')
-                  ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                  : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
-              }`}
-            >
-              Team Arena
-            </Link>
+            <>
+              <Link
+                to="/team/dashboard"
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                  isActive('/team/dashboard')
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                    : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
+                }`}
+              >
+                Team Arena
+              </Link>
+              <Link
+                to="/team/workspace"
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+                  isActive('/team/workspace') || isActive('/workspace') || isActive('/workspace-preview')
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                    : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
+                }`}
+              >
+                <FileCode className="w-4 h-4 text-emerald-600" />
+                <span>Workspace</span>
+              </Link>
+            </>
           )}
-
-          <Link
-            to="/workspace-preview"
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
-              isActive('/workspace-preview')
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
-            }`}
-          >
-            <FileCode className="w-4 h-4 text-emerald-600" />
-            <span>Workspace</span>
-          </Link>
 
           <Link
             to="/rules"

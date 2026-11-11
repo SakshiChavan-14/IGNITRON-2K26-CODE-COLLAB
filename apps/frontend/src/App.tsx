@@ -37,7 +37,6 @@ export const App: React.FC = () => {
               {/* Public Routes (No Auth Required) */}
               <Route index element={<LandingPage />} />
               <Route path="rules" element={<RulesPage />} />
-              <Route path="workspace-preview" element={<CodingWorkspacePreviewPage />} />
               <Route path="status" element={<StatusPage />} />
               <Route path="register" element={<RegisterPage />} />
               <Route path="login" element={<TeamLoginPage />} />
@@ -56,6 +55,38 @@ export const App: React.FC = () => {
               {/* Team Protected Routes */}
               <Route
                 path="team/dashboard"
+                element={
+                  <ProtectedRoute requiredType="TEAM">
+                    <TeamDashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="team/workspace"
+                element={
+                  <ProtectedRoute requiredType="TEAM">
+                    <CodingWorkspacePreviewPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="workspace"
+                element={
+                  <ProtectedRoute requiredType="TEAM">
+                    <CodingWorkspacePreviewPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="workspace-preview"
+                element={
+                  <ProtectedRoute requiredType="TEAM">
+                    <CodingWorkspacePreviewPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="team/submissions"
                 element={
                   <ProtectedRoute requiredType="TEAM">
                     <TeamDashboardPage />
