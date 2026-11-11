@@ -103,23 +103,3 @@ export class ToggleTeamStatusDto {
   isActive!: boolean;
 }
 
-export class CsvPreviewRequestDto {
-  @IsString()
-  @IsNotEmpty({ message: 'CSV content cannot be empty' })
-  csvContent!: string;
-
-  @IsOptional()
-  columnMapping?: Record<string, string>;
-}
-
-export class CsvConfirmImportDto {
-  @IsArray()
-  @ArrayMinSize(1, { message: 'At least one team must be provided for import' })
-  validRows!: Array<{
-    teamCode: string;
-    teamName: string;
-    institution?: string;
-    participant1: ParticipantInputDto;
-    participant2: ParticipantInputDto;
-  }>;
-}

@@ -4,8 +4,6 @@ import {
   TeamCredentials,
   CreateTeamDto,
   UpdateTeamDto,
-  CsvImportPreviewResponse,
-  CsvImportConfirmResult,
 } from '@ignitron/shared';
 import { apiClient } from './api';
 
@@ -95,30 +93,6 @@ export const adminService = {
       method: 'POST',
     });
   },
-
-  async previewCsv(
-    csvContent: string,
-    columnMapping?: Record<string, string>,
-  ): Promise<CsvImportPreviewResponse> {
-    const res = await apiClient<{
-      success: boolean;
-      data: CsvImportPreviewResponse;
-    }>('/admin/teams/import/preview', {
-      method: 'POST',
-      body: JSON.stringify({ csvContent, columnMapping }),
-    });
-    return res.data;
-  },
-
-  async confirmCsvImport(validRows: any[]): Promise<CsvImportConfirmResult> {
-    const res = await apiClient<{
-      success: boolean;
-      data: CsvImportConfirmResult;
-    }>('/admin/teams/import/confirm', {
-      method: 'POST',
-      body: JSON.stringify({ validRows }),
-    });
-    return res.data;
-  },
 };
+
 
