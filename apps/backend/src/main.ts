@@ -17,6 +17,14 @@ async function bootstrap() {
   // Global API route prefix
   app.setGlobalPrefix(apiPrefix);
 
+  // Prevent browser caching on all API endpoints (anti-bfcache, logout protection)
+  app.use((_req: any, res: any, next: any) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+  });
+
   // Cookie parser middleware for HttpOnly JWT session tokens
   app.use(cookieParser());
 

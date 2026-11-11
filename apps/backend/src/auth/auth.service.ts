@@ -273,7 +273,13 @@ export class AuthService implements OnModuleInit {
    * Public lookup for Team Code before logging in, to allow selecting participant
    */
   async lookupTeam(teamCode: string): Promise<TeamLookupResponse> {
-    const formattedCode = teamCode.trim().toUpperCase();
+    const trimmed = (teamCode || '').trim();
+    if (trimmed.includes('@')) {
+      throw new BadRequestException(
+        'Team Code cannot be an email address. Please use your assigned Team Code (e.g. IGN-XXXX).',
+      );
+    }
+    const formattedCode = trimmed.toUpperCase();
     const team = await this.prisma.team.findUnique({
       where: { teamCode: formattedCode },
       include: {
@@ -313,7 +319,13 @@ export class AuthService implements OnModuleInit {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<{ user: AuthTeamUser; token: string }> {
-    const formattedCode = dto.teamCode.trim().toUpperCase();
+    const trimmed = (dto.teamCode || '').trim();
+    if (trimmed.includes('@')) {
+      throw new BadRequestException(
+        'Team Code cannot be an email address. Please use your assigned Team Code (e.g. IGN-XXXX).',
+      );
+    }
+    const formattedCode = trimmed.toUpperCase();
 
     const team = await this.prisma.team.findUnique({
       where: { teamCode: formattedCode },
