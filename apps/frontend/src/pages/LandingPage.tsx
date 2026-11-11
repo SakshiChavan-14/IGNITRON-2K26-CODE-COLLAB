@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useCompetitionState } from '../hooks/useCompetition';
 import {
   Terminal,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export const LandingPage: React.FC = () => {
+  const { user } = useAuth();
   const { data: compState } = useCompetitionState();
 
   const getStatusBadge = () => {
@@ -73,29 +75,50 @@ export const LandingPage: React.FC = () => {
 
         {/* Action Buttons */}
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            to="/register"
-            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all shadow-md shadow-emerald-600/25 flex items-center gap-2 hover:scale-[1.02]"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Register Your Team</span>
-          </Link>
+          {!user && (
+            <Link
+              to="/register"
+              className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all shadow-md shadow-emerald-600/25 flex items-center gap-2 hover:scale-[1.02]"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Register Your Team</span>
+            </Link>
+          )}
 
-          <Link
-            to="/login"
-            className="px-5 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-semibold text-sm transition-colors flex items-center gap-2 shadow-xs"
-          >
-            <LogIn className="w-4 h-4 text-emerald-600" />
-            <span>Enter Team Arena</span>
-          </Link>
-
-          <Link
-            to="/workspace-preview"
-            className="px-5 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold text-sm transition-colors flex items-center gap-2 shadow-xs"
-          >
-            <FileCode className="w-4 h-4 text-emerald-600" />
-            <span>Workspace Preview</span>
-          </Link>
+          {user?.type === 'TEAM' ? (
+            <>
+              <Link
+                to="/team/dashboard"
+                className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all shadow-md shadow-emerald-600/25 flex items-center gap-2 hover:scale-[1.02]"
+              >
+                <Users className="w-4 h-4" />
+                <span>Go to Team Arena</span>
+              </Link>
+              <Link
+                to="/team/workspace"
+                className="px-5 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-semibold text-sm transition-colors flex items-center gap-2 shadow-xs"
+              >
+                <FileCode className="w-4 h-4 text-emerald-600" />
+                <span>Coding Workspace</span>
+              </Link>
+            </>
+          ) : user?.type === 'ADMIN' ? (
+            <Link
+              to="/admin/dashboard"
+              className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all shadow-md shadow-emerald-600/25 flex items-center gap-2 hover:scale-[1.02]"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Admin Dashboard</span>
+            </Link>
+          ) : (
+            <Link
+              to="/login"
+              className="px-5 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-semibold text-sm transition-colors flex items-center gap-2 shadow-xs"
+            >
+              <LogIn className="w-4 h-4 text-emerald-600" />
+              <span>Enter Team Arena</span>
+            </Link>
+          )}
 
           <Link
             to="/rules"

@@ -12,6 +12,7 @@ import {
   UserCheck,
   Search,
   UserPlus,
+  Info,
 } from 'lucide-react';
 
 export const TeamLoginPage: React.FC = () => {
@@ -25,6 +26,7 @@ export const TeamLoginPage: React.FC = () => {
   const [participants, setParticipants] = useState<TeamParticipantOption[]>([]);
   const [lookingUp, setLookingUp] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [emailWarning, setEmailWarning] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -33,15 +35,41 @@ export const TeamLoginPage: React.FC = () => {
 
   const from = (location.state as any)?.from?.pathname || '/team/dashboard';
 
+  const handleTeamCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setTeamCode(val);
+    setTeamName(null);
+    setParticipants([]);
+    setLookupError(null);
+
+    if (val.includes('@')) {
+      setEmailWarning(
+        'You entered an email address. Login requires your assigned Team Code (e.g. IGN-XXXX), not a participant email.',
+      );
+    } else {
+      setEmailWarning(null);
+    }
+  };
+
   const handleLookup = async (codeToLookup?: string) => {
-    const code = (codeToLookup || teamCode).trim();
-    if (!code) return;
+    const rawCode = codeToLookup !== undefined ? codeToLookup : teamCode;
+    const trimmed = rawCode.trim();
+    if (!trimmed) return;
+
+    if (trimmed.includes('@')) {
+      setLookupError('Login requires your assigned Team Code (e.g. IGN-XXXX), not a participant email address.');
+      setTeamName(null);
+      setParticipants([]);
+      return;
+    }
+
+    const normalizedCode = trimmed.toUpperCase();
     setLookupError(null);
     setLoginError(null);
     setLookingUp(true);
 
     try {
-      const res = await authService.lookupTeam(code);
+      const res = await authService.lookupTeam(normalizedCode);
       setTeamName(res.teamName);
       setParticipants(res.participants);
       if (res.participants.length > 0) {
@@ -64,6 +92,17 @@ export const TeamLoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmedCode = teamCode.trim();
+    if (!trimmedCode) {
+      setLoginError('Team Code is required.');
+      return;
+    }
+
+    if (trimmedCode.includes('@')) {
+      setLoginError('Login requires your assigned Team Code (e.g. IGN-XXXX), not a participant email address.');
+      return;
+    }
+
     if (!selectedParticipantId) {
       setLoginError('Please select which participant (A or B) is logging in.');
       return;
@@ -74,7 +113,7 @@ export const TeamLoginPage: React.FC = () => {
 
     try {
       await loginTeam({
-        teamCode: teamCode.trim().toUpperCase(),
+        teamCode: trimmedCode.toUpperCase(),
         password,
         participantId: selectedParticipantId,
       });
@@ -104,6 +143,17 @@ export const TeamLoginPage: React.FC = () => {
           </p>
         </div>
 
+        {/* Informative Guidance Banner */}
+        <div className="mb-5 p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-emerald-950 text-xs flex items-start gap-2.5">
+          <Info className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+          <div className="leading-relaxed">
+            <span className="font-semibold block text-emerald-900 mb-0.5">Login Notice</span>
+            <span>
+              Login requires your assigned <strong>Team Code</strong> (e.g. <code className="bg-emerald-100/90 px-1 py-0.5 rounded font-mono font-bold text-emerald-800">IGN-XXXX</code>), not participant email addresses.
+            </span>
+          </div>
+        </div>
+
         {loginError && (
           <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5 shadow-xs">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
@@ -124,7 +174,7 @@ export const TeamLoginPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Step 1: Team Code */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label htmlFor="teamCode" className="block text-xs font-semibold text-slate-700 mb-1.5">
               Assigned Team Code
             </label>
             <div className="flex gap-2">
@@ -133,17 +183,19 @@ export const TeamLoginPage: React.FC = () => {
                   <Hash className="w-4 h-4" />
                 </div>
                 <input
+                  id="teamCode"
+                  name="ignitron_team_code"
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
                   required
                   value={teamCode}
-                  onChange={(e) => {
-                    setTeamCode(e.target.value.toUpperCase());
-                    setTeamName(null);
-                    setParticipants([]);
-                  }}
+                  onChange={handleTeamCodeChange}
                   onBlur={() => handleLookup()}
                   placeholder="e.g. IGN-4A1B"
-                  className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-mono text-slate-900 placeholder-slate-400 uppercase focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-xs"
+                  className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-xs"
                 />
               </div>
               <button
@@ -162,6 +214,12 @@ export const TeamLoginPage: React.FC = () => {
                 )}
               </button>
             </div>
+            {emailWarning && (
+              <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                <span>{emailWarning}</span>
+              </div>
+            )}
           </div>
 
           {/* Team Name Confirmation */}
