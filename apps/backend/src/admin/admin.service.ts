@@ -7,15 +7,11 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { parse } from 'csv-parse/sync';
 import {
   TeamStatus,
   DashboardStatsDto,
   TeamListItem,
   TeamCredentials,
-  CsvImportPreviewResponse,
-  CsvRowValidation,
-  CsvImportConfirmResult,
 } from '@ignitron/shared';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -172,6 +168,59 @@ export class AdminService {
       };
     });
   }
+
+  /**
+   * Export all teams and participants roster as CSV
+   */
+  async exportTeamsCsv(): Promise<string> {
+    const teams = await this.getTeams();
+    const headers = [
+      'Team Code',
+      'Team Name',
+      'Institution',
+      'Status',
+      'Is Active',
+      'Registered At',
+      'Last Login At',
+      'Active Participant Session',
+      'Participant 1 Name',
+      'Participant 1 Email',
+      'Participant 1 Phone',
+      'Participant 1 Student ID',
+      'Participant 2 Name',
+      'Participant 2 Email',
+      'Participant 2 Phone',
+      'Participant 2 Student ID',
+    ];
+
+    const escapeCsv = (val: any): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = teams.map((t) => [
+      escapeCsv(t.teamCode),
+      escapeCsv(t.teamName),
+      escapeCsv(t.institution),
+      escapeCsv(t.status),
+      t.isActive ? 'Active' : 'Inactive',
+      escapeCsv(t.createdAt),
+      escapeCsv(t.lastLoginAt),
+      escapeCsv(t.activeSession?.participantName || 'None'),
+      escapeCsv(t.participants[0]?.fullName),
+      escapeCsv(t.participants[0]?.email),
+      escapeCsv(t.participants[0]?.phone),
+      escapeCsv(t.participants[0]?.studentId),
+      escapeCsv(t.participants[1]?.fullName),
+      escapeCsv(t.participants[1]?.email),
+      escapeCsv(t.participants[1]?.phone),
+      escapeCsv(t.participants[1]?.studentId),
+    ]);
+
+    return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+  }
+
 
   /**
    * Get team details with participants and session history
@@ -498,289 +547,6 @@ export class AdminService {
     return {
       message: `Active session revoked successfully`,
       sessionsRevoked: updated.count,
-    };
-  }
-
-  /**
-   * Preview and validate CSV content for bulk import with dynamic column mapping
-   */
-  async previewCsv(
-    csvContent: string,
-    customMapping?: Record<string, string>,
-  ): Promise<CsvImportPreviewResponse> {
-    if (!csvContent || csvContent.trim().length === 0) {
-      throw new BadRequestException('CSV file content is empty');
-    }
-
-    let records: Record<string, string>[];
-    try {
-      records = parse(csvContent, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-      });
-    } catch (parseError: any) {
-      throw new BadRequestException(
-        `Failed to parse CSV: ${parseError.message || 'Invalid format'}`,
-      );
-    }
-
-    if (records.length === 0) {
-      throw new BadRequestException('No data rows found in CSV');
-    }
-
-    const headers = Object.keys(records[0]);
-
-    // Helper to find mapped header name
-    const findHeader = (patterns: string[], explicitKey?: string): string | null => {
-      if (explicitKey && headers.includes(explicitKey)) {
-        return explicitKey;
-      }
-      for (const p of patterns) {
-        const found = headers.find((h) => h.toLowerCase() === p.toLowerCase());
-        if (found) return found;
-      }
-      for (const p of patterns) {
-        const found = headers.find((h) =>
-          h.toLowerCase().replace(/[^a-z0-9]/g, '').includes(p.toLowerCase().replace(/[^a-z0-9]/g, '')),
-        );
-        if (found) return found;
-      }
-      return null;
-    };
-
-    const teamNameCol = findHeader(['team name', 'team_name', 'team', 'teamname'], customMapping?.teamNameColumn);
-    const teamCodeCol = findHeader(['team code', 'team_code', 'code', 'teamcode'], customMapping?.teamCodeColumn);
-    const institutionCol = findHeader(['institution', 'college', 'university', 'organization'], customMapping?.institutionColumn);
-
-    const p1NameCol = findHeader(['participant 1 name', 'participant1 name', 'p1 name', 'leader name', 'p1_name', 'member 1 name'], customMapping?.p1NameColumn);
-    const p1EmailCol = findHeader(['participant 1 email', 'participant1 email', 'p1 email', 'leader email', 'p1_email', 'member 1 email'], customMapping?.p1EmailColumn);
-    const p1PhoneCol = findHeader(['participant 1 phone', 'p1 phone', 'leader phone', 'p1_phone'], customMapping?.p1PhoneColumn);
-    const p1StudentIdCol = findHeader(['participant 1 student id', 'p1 student id', 'leader roll', 'p1_student_id'], customMapping?.p1StudentIdColumn);
-
-    const p2NameCol = findHeader(['participant 2 name', 'participant2 name', 'p2 name', 'member name', 'p2_name', 'member 2 name'], customMapping?.p2NameColumn);
-    const p2EmailCol = findHeader(['participant 2 email', 'participant2 email', 'p2 email', 'member email', 'p2_email', 'member 2 email'], customMapping?.p2EmailColumn);
-    const p2PhoneCol = findHeader(['participant 2 phone', 'p2 phone', 'member phone', 'p2_phone'], customMapping?.p2PhoneColumn);
-    const p2StudentIdCol = findHeader(['participant 2 student id', 'p2 student id', 'member roll', 'p2_student_id'], customMapping?.p2StudentIdColumn);
-
-    // Existing codes and emails in DB
-    const existingTeams = await this.prisma.team.findMany({ select: { teamCode: true } });
-    const existingParticipants = await this.prisma.participant.findMany({ select: { email: true } });
-
-    const existingCodesSet = new Set(existingTeams.map((t) => t.teamCode.toUpperCase()));
-    const existingEmailsSet = new Set(existingParticipants.map((p) => p.email.toLowerCase()));
-
-    const seenCodesInCsv = new Set<string>();
-    const seenEmailsInCsv = new Set<string>();
-
-    const rows: CsvRowValidation[] = [];
-    let validCount = 0;
-    let invalidCount = 0;
-    let duplicateCodesCount = 0;
-    let duplicateEmailsCount = 0;
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    for (let i = 0; i < records.length; i++) {
-      const row = records[i];
-      const errors: string[] = [];
-
-      const teamName = teamNameCol ? (row[teamNameCol] || '').trim() : '';
-      let teamCode = teamCodeCol ? (row[teamCodeCol] || '').trim().toUpperCase() : '';
-      const institution = institutionCol ? (row[institutionCol] || '').trim() : '';
-
-      const p1Name = p1NameCol ? (row[p1NameCol] || '').trim() : '';
-      const p1Email = p1EmailCol ? (row[p1EmailCol] || '').trim().toLowerCase() : '';
-      const p1Phone = p1PhoneCol ? (row[p1PhoneCol] || '').trim() : '';
-      const p1StudentId = p1StudentIdCol ? (row[p1StudentIdCol] || '').trim() : '';
-
-      const p2Name = p2NameCol ? (row[p2NameCol] || '').trim() : '';
-      const p2Email = p2EmailCol ? (row[p2EmailCol] || '').trim().toLowerCase() : '';
-      const p2Phone = p2PhoneCol ? (row[p2PhoneCol] || '').trim() : '';
-      const p2StudentId = p2StudentIdCol ? (row[p2StudentIdCol] || '').trim() : '';
-
-      // Validation
-      if (!teamName) {
-        errors.push('Team name is missing');
-      }
-
-      if (!p1Name) errors.push('Participant 1 name is missing');
-      if (!p1Email) {
-        errors.push('Participant 1 email is missing');
-      } else if (!emailRegex.test(p1Email)) {
-        errors.push('Participant 1 email format is invalid');
-      }
-
-      if (!p2Name) errors.push('Participant 2 name is missing');
-      if (!p2Email) {
-        errors.push('Participant 2 email is missing');
-      } else if (!emailRegex.test(p2Email)) {
-        errors.push('Participant 2 email format is invalid');
-      }
-
-      if (p1Email && p2Email && p1Email === p2Email) {
-        errors.push('Participant 1 and Participant 2 cannot have the same email');
-        duplicateEmailsCount++;
-      }
-
-      if (p1Email) {
-        if (seenEmailsInCsv.has(p1Email)) {
-          errors.push(`Participant 1 email "${p1Email}" appears multiple times in CSV`);
-          duplicateEmailsCount++;
-        } else if (existingEmailsSet.has(p1Email)) {
-          errors.push(`Participant 1 email "${p1Email}" already registered in database`);
-          duplicateEmailsCount++;
-        }
-        seenEmailsInCsv.add(p1Email);
-      }
-
-      if (p2Email) {
-        if (seenEmailsInCsv.has(p2Email)) {
-          errors.push(`Participant 2 email "${p2Email}" appears multiple times in CSV`);
-          duplicateEmailsCount++;
-        } else if (existingEmailsSet.has(p2Email)) {
-          errors.push(`Participant 2 email "${p2Email}" already registered in database`);
-          duplicateEmailsCount++;
-        }
-        seenEmailsInCsv.add(p2Email);
-      }
-
-      if (teamCode) {
-        if (seenCodesInCsv.has(teamCode)) {
-          errors.push(`Team code "${teamCode}" appears multiple times in CSV`);
-          duplicateCodesCount++;
-        } else if (existingCodesSet.has(teamCode)) {
-          errors.push(`Team code "${teamCode}" already exists in database`);
-          duplicateCodesCount++;
-        }
-        seenCodesInCsv.add(teamCode);
-      }
-
-      const isValid = errors.length === 0;
-      if (isValid) {
-        validCount++;
-      } else {
-        invalidCount++;
-      }
-
-      rows.push({
-        rowIndex: i + 1,
-        rawRow: row,
-        isValid,
-        errors,
-        mappedData: isValid
-          ? {
-              teamCode: teamCode || `IGN-${crypto.randomBytes(2).toString('hex').toUpperCase()}`,
-              teamName,
-              institution,
-              participant1: { fullName: p1Name, email: p1Email, phone: p1Phone, studentId: p1StudentId },
-              participant2: { fullName: p2Name, email: p2Email, phone: p2Phone, studentId: p2StudentId },
-            }
-          : undefined,
-      });
-    }
-
-    return {
-      totalRows: records.length,
-      validCount,
-      invalidCount,
-      duplicateCodesCount,
-      duplicateEmailsCount,
-      rows,
-      headers,
-    };
-  }
-
-  /**
-   * Confirm and execute database transaction for bulk import
-   */
-  async confirmCsvImport(
-    validRows: Array<{
-      teamCode: string;
-      teamName: string;
-      institution?: string;
-      participant1: { fullName: string; email: string; phone?: string; studentId?: string };
-      participant2: { fullName: string; email: string; phone?: string; studentId?: string };
-    }>,
-    adminId: string,
-  ): Promise<CsvImportConfirmResult> {
-    if (!validRows || validRows.length === 0) {
-      throw new BadRequestException('No valid records provided for import');
-    }
-
-    const saltRounds = 10;
-    const generatedCredentials: TeamCredentials[] = [];
-
-    // Pre-generate credentials and hashes
-    const preparedTeams = await Promise.all(
-      validRows.map(async (row) => {
-        const temporaryPassword = this.generateRandomPassword(10);
-        const passwordHash = await bcrypt.hash(temporaryPassword, saltRounds);
-        return {
-          row,
-          temporaryPassword,
-          passwordHash,
-        };
-      }),
-    );
-
-    const activityLog = await this.prisma.$transaction(async (tx) => {
-      for (const item of preparedTeams) {
-        const { row, temporaryPassword, passwordHash } = item;
-        const createdTeam = await tx.team.create({
-          data: {
-            teamCode: row.teamCode.toUpperCase(),
-            teamName: row.teamName,
-            institution: row.institution || null,
-            passwordHash,
-            mustChangePassword: true,
-            isActive: true,
-            participants: {
-              create: [
-                {
-                  fullName: row.participant1.fullName,
-                  email: row.participant1.email.toLowerCase(),
-                  phone: row.participant1.phone || null,
-                  studentId: row.participant1.studentId || null,
-                },
-                {
-                  fullName: row.participant2.fullName,
-                  email: row.participant2.email.toLowerCase(),
-                  phone: row.participant2.phone || null,
-                  studentId: row.participant2.studentId || null,
-                },
-              ],
-            },
-          },
-        });
-
-        generatedCredentials.push({
-          teamId: createdTeam.id,
-          teamCode: createdTeam.teamCode,
-          teamName: createdTeam.teamName,
-          temporaryPassword,
-          generatedAt: new Date().toISOString(),
-        });
-      }
-
-      return await tx.activityLog.create({
-        data: {
-          actorType: 'ADMIN',
-          actorId: adminId,
-          action: 'TEAMS_BULK_IMPORTED',
-          description: `Admin imported ${preparedTeams.length} teams via CSV`,
-          metadata: {
-            importedCount: preparedTeams.length,
-            teamCodes: preparedTeams.map((p) => p.row.teamCode),
-          },
-        },
-      });
-    });
-
-    return {
-      importedCount: preparedTeams.length,
-      generatedCredentials,
-      activityLogId: activityLog.id,
     };
   }
 }

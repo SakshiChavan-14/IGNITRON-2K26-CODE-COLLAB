@@ -6,10 +6,12 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -20,8 +22,6 @@ import {
   CreateTeamDto,
   UpdateTeamDto,
   ToggleTeamStatusDto,
-  CsvPreviewRequestDto,
-  CsvConfirmImportDto,
 } from './dto/admin-teams.dto';
 
 @Controller('admin')
@@ -43,6 +43,17 @@ export class AdminController {
   ) {
     const teams = await this.adminService.getTeams(search, status);
     return { success: true, data: teams };
+  }
+
+  @Get('teams/export/csv')
+  async exportTeamsCsv(@Res() res: Response) {
+    const csvData = await this.adminService.exportTeamsCsv();
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="ignitron_teams_${Date.now()}.csv"`,
+    );
+    return res.send(csvData);
   }
 
   @Get('teams/:id')
@@ -98,28 +109,5 @@ export class AdminController {
   ) {
     const result = await this.adminService.revokeActiveSession(id, user.id);
     return { success: true, ...result };
-  }
-
-  @Post('teams/import/preview')
-  @HttpCode(HttpStatus.OK)
-  async previewCsv(@Body() dto: CsvPreviewRequestDto) {
-    const preview = await this.adminService.previewCsv(
-      dto.csvContent,
-      dto.columnMapping,
-    );
-    return { success: true, data: preview };
-  }
-
-  @Post('teams/import/confirm')
-  @HttpCode(HttpStatus.OK)
-  async confirmCsvImport(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: CsvConfirmImportDto,
-  ) {
-    const result = await this.adminService.confirmCsvImport(
-      dto.validRows,
-      user.id,
-    );
-    return { success: true, data: result };
   }
 }
