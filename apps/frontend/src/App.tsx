@@ -9,12 +9,12 @@ import { RulesPage } from './pages/RulesPage';
 import { CodingWorkspacePreviewPage } from './pages/team/CodingWorkspacePreviewPage';
 import { StatusPage } from './pages/StatusPage';
 import { TeamLoginPage } from './pages/TeamLoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { TeamDashboardPage } from './pages/team/TeamDashboardPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { TeamManagementPage } from './pages/admin/TeamManagementPage';
-import { CsvImportPage } from './pages/admin/CsvImportPage';
 import { CompetitionControlPage } from './pages/admin/CompetitionControlPage';
 
 const queryClient = new QueryClient({
@@ -39,6 +39,7 @@ export const App: React.FC = () => {
               <Route path="rules" element={<RulesPage />} />
               <Route path="workspace-preview" element={<CodingWorkspacePreviewPage />} />
               <Route path="status" element={<StatusPage />} />
+              <Route path="register" element={<RegisterPage />} />
               <Route path="login" element={<TeamLoginPage />} />
               <Route path="admin/login" element={<AdminLoginPage />} />
 
@@ -89,11 +90,7 @@ export const App: React.FC = () => {
               />
               <Route
                 path="admin/import"
-                element={
-                  <ProtectedRoute requiredType="ADMIN">
-                    <CsvImportPage />
-                  </ProtectedRoute>
-                }
+                element={<Navigate to="/admin/teams" replace />}
               />
 
               {/* Fallback */}
