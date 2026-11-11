@@ -13,7 +13,12 @@ import {
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
-import { AdminLoginDto, TeamLoginDto, ChangePasswordDto } from './dto/auth.dto';
+import {
+  AdminLoginDto,
+  TeamLoginDto,
+  ChangePasswordDto,
+  RegisterTeamDto,
+} from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthUser, SESSION_CONFIG } from '@ignitron/shared';
@@ -55,6 +60,13 @@ export class AuthController {
     const { user, token } = await this.authService.adminLogin(dto);
     this.setSessionCookie(res, token);
     return { success: true, user };
+  }
+
+  @Post('team/register')
+  @HttpCode(HttpStatus.CREATED)
+  async registerTeam(@Body() dto: RegisterTeamDto) {
+    const result = await this.authService.registerTeam(dto);
+    return { success: true, data: result };
   }
 
   @Get('team/lookup/:teamCode')

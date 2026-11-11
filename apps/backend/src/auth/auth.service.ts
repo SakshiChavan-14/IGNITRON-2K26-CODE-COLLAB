@@ -10,6 +10,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import {
   AdminLoginDto,
   TeamLoginDto,
@@ -18,11 +19,13 @@ import {
   AuthAdminUser,
   AuthTeamUser,
   TeamLookupResponse,
+  RegisterTeamResponse,
   AdminJwtPayload,
   TeamJwtPayload,
   SESSION_CONFIG,
 } from '@ignitron/shared';
 import { PrismaService } from '../database/prisma.service';
+import { RegisterTeamDto } from './dto/auth.dto';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -132,6 +135,138 @@ export class AuthService implements OnModuleInit {
       },
       token,
     };
+  }
+
+  /**
+   * Public Team Registration
+   * - Exactly two participants per team
+   * - Accepts personal or college email addresses
+   * - Validates distinct participant emails and prevents duplicates in database
+   * - Hashes password with bcrypt
+   * - Sets mustChangePassword: false (team set their own password)
+   */
+  async registerTeam(dto: RegisterTeamDto): Promise<RegisterTeamResponse> {
+    const trimmedTeamName = dto.teamName.trim();
+    const trimmedInstitution = dto.institution.trim();
+
+    if (!dto.participants || dto.participants.length !== 2) {
+      throw new BadRequestException('Team registration requires exactly two participants');
+    }
+
+    const p1 = dto.participants[0];
+    const p2 = dto.participants[1];
+
+    const email1 = p1.email.trim().toLowerCase();
+    const email2 = p2.email.trim().toLowerCase();
+
+    if (email1 === email2) {
+      throw new ConflictException('Participant 1 and Participant 2 must have distinct email addresses');
+    }
+
+    // Check for existing participant emails in database
+    const existingP1 = await this.prisma.participant.findUnique({
+      where: { email: email1 },
+    });
+    if (existingP1) {
+      throw new ConflictException(`Participant email "${email1}" is already registered with another team`);
+    }
+
+    const existingP2 = await this.prisma.participant.findUnique({
+      where: { email: email2 },
+    });
+    if (existingP2) {
+      throw new ConflictException(`Participant email "${email2}" is already registered with another team`);
+    }
+
+    // Generate unique team code
+    let teamCode = '';
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = `IGN-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+      const existing = await this.prisma.team.findUnique({
+        where: { teamCode: candidate },
+      });
+      if (!existing) {
+        teamCode = candidate;
+        break;
+      }
+    }
+    if (!teamCode) {
+      teamCode = `IGN-${Date.now().toString().slice(-4)}`;
+    }
+
+    // Hash password with bcrypt
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    // Create team and participants in a transaction
+    const newTeam = await this.prisma.$transaction(async (tx) => {
+      const createdTeam = await tx.team.create({
+        data: {
+          teamCode,
+          teamName: trimmedTeamName,
+          institution: trimmedInstitution,
+          passwordHash,
+          mustChangePassword: false,
+          isActive: true,
+          status: 'ACTIVE',
+        },
+      });
+
+      await tx.participant.createMany({
+        data: [
+          {
+            teamId: createdTeam.id,
+            fullName: p1.fullName.trim(),
+            email: email1,
+            phone: p1.phone?.trim() || null,
+            studentId: p1.studentId?.trim() || null,
+            isActive: true,
+          },
+          {
+            teamId: createdTeam.id,
+            fullName: p2.fullName.trim(),
+            email: email2,
+            phone: p2.phone?.trim() || null,
+            studentId: p2.studentId?.trim() || null,
+            isActive: true,
+          },
+        ],
+      });
+
+      const participants = await tx.participant.findMany({
+        where: { teamId: createdTeam.id },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      // Record activity log
+      await tx.activityLog.create({
+        data: {
+          actorType: 'TEAM',
+          actorId: createdTeam.id,
+          action: 'TEAM_REGISTERED',
+          description: `Team "${trimmedTeamName}" (${teamCode}) registered from ${trimmedInstitution}`,
+          metadata: {
+            participantEmails: [email1, email2],
+          },
+        },
+      });
+
+      return {
+        teamId: createdTeam.id,
+        teamCode: createdTeam.teamCode,
+        teamName: createdTeam.teamName,
+        institution: createdTeam.institution || trimmedInstitution,
+        participants: participants.map((p) => ({
+          id: p.id,
+          fullName: p.fullName,
+          email: p.email,
+          phone: p.phone,
+          studentId: p.studentId,
+        })),
+      };
+    });
+
+    this.logger.log(`Public team registration successful: ${newTeam.teamName} [${newTeam.teamCode}]`);
+    return newTeam;
   }
 
   /**
