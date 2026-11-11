@@ -4,7 +4,7 @@ import { Navbar } from '../components/Navbar';
 
 export const RootLayout: React.FC = () => {
   return (
-    <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-sky-500/30 selection:text-sky-200">
+    <div className="flex flex-col min-h-screen bg-[#f8faf9] text-slate-800 font-sans selection:bg-emerald-500/20 selection:text-emerald-900">
       <Navbar />
 
       {/* Main Content Area */}
@@ -13,8 +13,8 @@ export const RootLayout: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-900/30 py-4 text-center text-xs text-slate-500 font-mono">
-        IGNITRON 2K26 — Code Relay • University Local Competition Platform • Phase 03
+      <footer className="border-t border-slate-200/80 bg-white/60 py-4 text-center text-xs text-slate-500 font-mono">
+        IGNITRON 2K26 — Code Relay • Official University Tournament Platform
       </footer>
     </div>
   );
