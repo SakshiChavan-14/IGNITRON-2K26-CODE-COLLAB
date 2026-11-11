@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/auth.service';
 import { TeamParticipantOption } from '@ignitron/shared';
@@ -11,10 +11,14 @@ import {
   ArrowRight,
   UserCheck,
   Search,
+  UserPlus,
 } from 'lucide-react';
 
 export const TeamLoginPage: React.FC = () => {
-  const [teamCode, setTeamCode] = useState('');
+  const location = useLocation();
+  const prefilledCode = (location.state as any)?.prefilledCode || '';
+
+  const [teamCode, setTeamCode] = useState(prefilledCode);
   const [password, setPassword] = useState('');
   const [selectedParticipantId, setSelectedParticipantId] = useState('');
   const [teamName, setTeamName] = useState<string | null>(null);
@@ -26,18 +30,18 @@ export const TeamLoginPage: React.FC = () => {
 
   const { loginTeam } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const from = (location.state as any)?.from?.pathname || '/team/dashboard';
 
-  const handleLookup = async () => {
-    if (!teamCode.trim()) return;
+  const handleLookup = async (codeToLookup?: string) => {
+    const code = (codeToLookup || teamCode).trim();
+    if (!code) return;
     setLookupError(null);
     setLoginError(null);
     setLookingUp(true);
 
     try {
-      const res = await authService.lookupTeam(teamCode.trim());
+      const res = await authService.lookupTeam(code);
       setTeamName(res.teamName);
       setParticipants(res.participants);
       if (res.participants.length > 0) {
@@ -52,10 +56,16 @@ export const TeamLoginPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (prefilledCode) {
+      handleLookup(prefilledCode);
+    }
+  }, [prefilledCode]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedParticipantId) {
-      setLoginError('Please select which participant is logging in.');
+      setLoginError('Please select which participant (A or B) is logging in.');
       return;
     }
 
@@ -72,7 +82,7 @@ export const TeamLoginPage: React.FC = () => {
     } catch (err: any) {
       setLoginError(
         err?.message ||
-          'Login failed. Please check your team credentials and ensure no active concurrent session exists.',
+          'Login failed. Please verify your team code and password. If a teammate is active, they must log out first.',
       );
     } finally {
       setSubmitting(false);
@@ -81,32 +91,32 @@ export const TeamLoginPage: React.FC = () => {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-xl shadow-2xl p-6 sm:p-8 backdrop-blur-sm">
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 mb-3 shadow-lg shadow-sky-500/10">
+      <div className="w-full max-w-md bg-white border border-slate-200/90 rounded-2xl shadow-xl shadow-emerald-950/5 p-6 sm:p-8">
+        <div className="flex flex-col items-center text-center mb-6">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mb-3 shadow-xs">
             <Users className="w-6 h-6" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-white">
+          <h1 className="text-xl font-bold tracking-tight text-emerald-950">
             Team Competition Access
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            IGNITRON 2K26 Code Relay Portal
+          <p className="text-xs text-slate-500 mt-1">
+            Enter your Team Code and select the active relay participant
           </p>
         </div>
 
         {loginError && (
-          <div className="mb-6 p-3 rounded-lg bg-rose-950/40 border border-rose-800/60 flex items-start gap-2.5 text-rose-300 text-xs">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5 shadow-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
             <div>
-              <span className="font-semibold block mb-0.5">Session Error</span>
+              <span className="font-semibold block mb-0.5">Authentication Error</span>
               <span>{loginError}</span>
             </div>
           </div>
         )}
 
         {lookupError && (
-          <div className="mb-6 p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 flex items-start gap-2.5 text-amber-300 text-xs">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="mb-5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
             <span>{lookupError}</span>
           </div>
         )}
@@ -114,12 +124,12 @@ export const TeamLoginPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Step 1: Team Code */}
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
               Assigned Team Code
             </label>
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                   <Hash className="w-4 h-4" />
                 </div>
                 <input
@@ -131,22 +141,22 @@ export const TeamLoginPage: React.FC = () => {
                     setTeamName(null);
                     setParticipants([]);
                   }}
-                  onBlur={handleLookup}
+                  onBlur={() => handleLookup()}
                   placeholder="e.g. IGN-4A1B"
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm font-mono text-slate-200 placeholder-slate-600 uppercase focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+                  className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-mono text-slate-900 placeholder-slate-400 uppercase focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-xs"
                 />
               </div>
               <button
                 type="button"
-                onClick={handleLookup}
+                onClick={() => handleLookup()}
                 disabled={lookingUp || !teamCode.trim()}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition-colors flex items-center gap-1 disabled:opacity-50"
+                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-colors flex items-center gap-1 disabled:opacity-50"
               >
                 {lookingUp ? (
-                  <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    <Search className="w-3.5 h-3.5" />
+                    <Search className="w-3.5 h-3.5 text-slate-500" />
                     <span>Find</span>
                   </>
                 )}
@@ -156,47 +166,47 @@ export const TeamLoginPage: React.FC = () => {
 
           {/* Team Name Confirmation */}
           {teamName && (
-            <div className="p-2.5 rounded-lg bg-sky-950/30 border border-sky-800/50 flex items-center justify-between text-xs text-sky-300">
-              <span className="font-medium text-slate-400">Identified Team:</span>
-              <span className="font-semibold text-sky-400">{teamName}</span>
+            <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between text-xs text-emerald-950">
+              <span className="font-medium text-emerald-800">Team:</span>
+              <span className="font-bold text-emerald-950">{teamName}</span>
             </div>
           )}
 
-          {/* Step 2: Active Participant Selection */}
+          {/* Step 2: Active Participant Selection (A or B) */}
           {participants.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                Active Relay Participant (1 active session permitted)
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Active Relay Participant (A or B)
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                  <UserCheck className="w-4 h-4 text-emerald-400" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-emerald-600">
+                  <UserCheck className="w-4 h-4" />
                 </div>
                 <select
                   value={selectedParticipantId}
                   onChange={(e) => setSelectedParticipantId(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors appearance-none"
+                  className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors appearance-none shadow-xs"
                 >
-                  {participants.map((p) => (
+                  {participants.map((p, idx) => (
                     <option key={p.id} value={p.id}>
-                      {p.fullName} {p.studentId ? `(${p.studentId})` : ''} — {p.email}
+                      Participant {idx === 0 ? 'A' : 'B'}: {p.fullName} ({p.email})
                     </option>
                   ))}
                 </select>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                University competition rules strictly permit only one active participant per team at any time.
+                Competition rule: Exactly one participant holds the terminal lock at any time.
               </p>
             </div>
           )}
 
           {/* Step 3: Password */}
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              Team Access Password
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Team Password
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                 <Lock className="w-4 h-4" />
               </div>
               <input
@@ -205,7 +215,7 @@ export const TeamLoginPage: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+                className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-xs"
               />
             </div>
           </div>
@@ -213,26 +223,30 @@ export const TeamLoginPage: React.FC = () => {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full mt-2 py-2.5 px-4 bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 disabled:opacity-50"
+            className="w-full mt-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {submitting ? (
-              <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
-                <span>Enter Code Relay Arena</span>
+                <span>Enter Team Arena</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-slate-800/80 text-center">
-          <span className="text-[11px] text-slate-500 font-mono">
-            Registration managed exclusively via official University Unstop roster
-          </span>
+        <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-center text-xs text-slate-500 gap-1.5">
+          <span>New contestant team?</span>
+          <Link
+            to="/register"
+            className="text-emerald-700 hover:text-emerald-600 font-bold flex items-center gap-1 underline underline-offset-2"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Register your team here</span>
+          </Link>
         </div>
       </div>
     </div>
   );
 };
-
