@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   AuthUser,
   AdminLoginDto,
@@ -23,6 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   const refreshUser = useCallback(async () => {
     try {
@@ -39,6 +41,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     refreshUser();
   }, [refreshUser]);
 
+  // Revalidate authentication when page is restored from bfcache (browser Back/Forward)
+  useEffect(() => {
+    const handlePageShow = () => {
+      refreshUser();
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, [refreshUser]);
+
   // Periodic heartbeat for active Team sessions (every 30 seconds)
   useEffect(() => {
     if (!user || user.type !== 'TEAM') return;
@@ -50,12 +61,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         if (err?.status === 401 || err?.status === 403) {
           // Session expired or revoked
           setUser(null);
+          queryClient.clear();
         }
       }
     }, SESSION_CONFIG.HEARTBEAT_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, queryClient]);
 
   const loginAdmin = async (dto: AdminLoginDto) => {
     const adminUser = await authService.adminLogin(dto);
@@ -67,13 +79,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setUser(teamUser);
   };
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await authService.logout();
+    } catch (err) {
+      console.warn('Backend logout call warning:', err);
     } finally {
       setUser(null);
+      queryClient.clear();
+      sessionStorage.clear();
     }
-  };
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider
