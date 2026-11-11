@@ -243,6 +243,34 @@ export interface CreateTeamDto {
   participants: [CreateParticipantInput, CreateParticipantInput];
 }
 
+export interface RegisterParticipantInput {
+  fullName: string;
+  email: string;
+  phone?: string;
+  studentId?: string;
+}
+
+export interface RegisterTeamDto {
+  teamName: string;
+  institution: string;
+  password: string;
+  participants: [RegisterParticipantInput, RegisterParticipantInput];
+}
+
+export interface RegisterTeamResponse {
+  teamId: string;
+  teamCode: string;
+  teamName: string;
+  institution: string;
+  participants: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone?: string | null;
+    studentId?: string | null;
+  }[];
+}
+
 export interface UpdateTeamDto {
   teamName?: string;
   institution?: string;
