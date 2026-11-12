@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { AdminNav } from '../../components/AdminNav';
 import { announcementService } from '../../services/announcement.service';
 import { AnnouncementItem, AnnouncementPriority } from '@ignitron/shared';
 import {
@@ -132,8 +131,7 @@ export const AnnouncementManagementPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8faf9] pb-12">
-      <AdminNav />
+    <div className="min-h-screen bg-[#f8faf9] pb-12 pt-4">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

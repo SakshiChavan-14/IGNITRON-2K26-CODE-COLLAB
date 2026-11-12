@@ -1,5 +1,4 @@
 import React from 'react';
-import { AdminNav } from '../../components/AdminNav';
 import { FileSpreadsheet, Download, ShieldCheck, Award } from 'lucide-react';
 import { adminService } from '../../services/admin.service';
 
@@ -30,8 +29,7 @@ export const ReportsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8faf9] pb-12">
-      <AdminNav />
+    <div className="min-h-screen bg-[#f8faf9] pb-12 pt-4">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-950 flex items-center gap-3">
