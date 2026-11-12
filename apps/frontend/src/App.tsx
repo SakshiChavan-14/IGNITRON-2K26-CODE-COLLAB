@@ -5,9 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RootLayout } from './layouts/RootLayout';
 import { LandingPage } from './pages/LandingPage';
-import { RulesPage } from './pages/RulesPage';
 import { CodingWorkspacePreviewPage } from './pages/team/CodingWorkspacePreviewPage';
-import { StatusPage } from './pages/StatusPage';
 import { TeamLoginPage } from './pages/TeamLoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
@@ -41,8 +39,8 @@ export const App: React.FC = () => {
             <Route path="/" element={<RootLayout />}>
               {/* Public Routes (No Auth Required) */}
               <Route index element={<LandingPage />} />
-              <Route path="rules" element={<RulesPage />} />
-              <Route path="status" element={<StatusPage />} />
+              <Route path="rules" element={<Navigate to="/#rules" replace />} />
+              <Route path="status" element={<Navigate to="/" replace />} />
               <Route path="register" element={<RegisterPage />} />
               <Route path="login" element={<TeamLoginPage />} />
               <Route path="admin/login" element={<AdminLoginPage />} />
