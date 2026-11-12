@@ -65,7 +65,10 @@ export class AdminService {
       inactiveTeams,
       totalParticipants,
       teamsWithActiveSessions,
+      unparticipatedTeams,
       compState,
+      recentTeamsRaw,
+      recentLoginsRaw,
     ] = await Promise.all([
       this.prisma.team.count(),
       this.prisma.team.count({ where: { isActive: true } }),
@@ -74,10 +77,49 @@ export class AdminService {
       this.prisma.teamSession.count({
         where: { status: 'ACTIVE' },
       }),
+      this.prisma.team.count({
+        where: { lastLoginAt: null },
+      }),
       this.prisma.competitionState.findUnique({
         where: { id: 'global' },
       }),
+      this.prisma.team.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          participants: {
+            select: { fullName: true, email: true },
+          },
+        },
+      }),
+      this.prisma.teamSession.findMany({
+        orderBy: { loginAt: 'desc' },
+        take: 6,
+        include: {
+          team: { select: { teamCode: true, teamName: true } },
+          participant: { select: { fullName: true } },
+        },
+      }),
     ]);
+
+    const recentRegistrations = recentTeamsRaw.map((t) => ({
+      id: t.id,
+      teamCode: t.teamCode,
+      teamName: t.teamName,
+      institution: t.institution,
+      createdAt: t.createdAt.toISOString(),
+      participants: t.participants,
+    }));
+
+    const recentLogins = recentLoginsRaw.map((s) => ({
+      id: s.id,
+      teamId: s.teamId,
+      teamCode: s.team.teamCode,
+      teamName: s.team.teamName,
+      participantName: s.participant.fullName,
+      loginAt: s.loginAt.toISOString(),
+      status: s.status,
+    }));
 
     return {
       totalTeams,
@@ -85,8 +127,11 @@ export class AdminService {
       inactiveTeams,
       totalParticipants,
       teamsWithActiveSessions,
+      unparticipatedTeams,
       currentCompetitionStatus: compState?.status || 'STANDBY',
       currentRoundNumber: compState?.currentRoundNumber || null,
+      recentRegistrations,
+      recentLogins,
     };
   }
 

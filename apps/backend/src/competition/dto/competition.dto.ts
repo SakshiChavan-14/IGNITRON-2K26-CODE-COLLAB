@@ -7,6 +7,7 @@ import {
   IsInt,
   Min,
   Max,
+  IsBoolean,
 } from 'class-validator';
 import { RoundControlAction } from '@ignitron/shared';
 
@@ -57,3 +58,14 @@ export class GenerateDemoDataDto {
   @IsOptional()
   count?: number = 20;
 }
+
+export class BackendPublishLeaderboardDto {
+  @IsInt()
+  @IsOptional()
+  roundNumber?: number;
+
+  @IsBoolean()
+  @IsNotEmpty()
+  isPublished!: boolean;
+}
+
