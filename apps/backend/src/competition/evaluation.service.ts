@@ -233,6 +233,7 @@ export class EvaluationService {
 
       if (progress) {
         let finalRoundScore = dto.totalScore;
+        let scoreBreakdownToSave = dto.criteriaScores ? (dto.criteriaScores as any) : undefined;
 
         // If Round 3, sum the highest score for each case
         if (submission.round?.roundNumber === 3) {
@@ -262,6 +263,16 @@ export class EvaluationService {
             finalRoundScore += dto.criteriaScores.codeQuality;
           }
           finalRoundScore = Math.min(100, finalRoundScore);
+
+          const prevBreakdown = (progress.scoreBreakdown as Record<string, any>) || {};
+          const cNum = submission.question?.caseNumber || 1;
+          scoreBreakdownToSave = {
+            ...prevBreakdown,
+            [`case${cNum}`]: dto.totalScore,
+            [`case${cNum}Criteria`]: dto.criteriaScores,
+            caseScores: Object.fromEntries(caseScores),
+            totalScore: finalRoundScore,
+          };
         }
 
         await this.prisma.teamRoundProgress.update({
@@ -269,7 +280,7 @@ export class EvaluationService {
           data: {
             score: finalRoundScore,
             evaluatedAt: now,
-            scoreBreakdown: dto.criteriaScores ? (dto.criteriaScores as any) : undefined,
+            scoreBreakdown: scoreBreakdownToSave,
           },
         });
       }
@@ -372,3 +383,4 @@ export class EvaluationService {
     };
   }
 }
+
