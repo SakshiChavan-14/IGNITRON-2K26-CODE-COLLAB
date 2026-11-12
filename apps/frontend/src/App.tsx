@@ -6,6 +6,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { RootLayout } from './layouts/RootLayout';
 import { LandingPage } from './pages/LandingPage';
 import { CodingWorkspacePreviewPage } from './pages/team/CodingWorkspacePreviewPage';
+import { McqArenaPage } from './pages/team/McqArenaPage';
 import { TeamLoginPage } from './pages/TeamLoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
@@ -61,6 +62,14 @@ export const App: React.FC = () => {
                 element={
                   <ProtectedRoute requiredType="TEAM">
                     <TeamDashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="team/arena/mcq"
+                element={
+                  <ProtectedRoute requiredType="TEAM">
+                    <McqArenaPage />
                   </ProtectedRoute>
                 }
               />
