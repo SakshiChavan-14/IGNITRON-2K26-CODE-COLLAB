@@ -819,5 +819,191 @@ export interface PublishLeaderboardDto {
   isPublished: boolean;
 }
 
+// ------------------------------------------------------------------------------
+// QUESTIONS & COMPETITION WORKFLOWS
+// ------------------------------------------------------------------------------
+
+export type QuestionType = 'MCQ' | 'BUG_HUNT' | 'CODING_CASE';
+
+export interface TestCaseDto {
+  stdin: string;
+  expectedOutput: string;
+  explanation?: string;
+  marks?: number;
+}
+
+export interface QuestionDto {
+  id: string;
+  roundId: string;
+  roundNumber?: number;
+  type: QuestionType;
+  orderNumber: number;
+  caseNumber?: number | null;
+  title: string;
+  description: string;
+  starterCode?: string | null;
+  language?: string | null;
+  marks: number;
+  options?: string[] | null;
+  correctOption?: number | null; // Admin only
+  explanation?: string | null; // Admin only
+  sampleTestCases?: TestCaseDto[] | null;
+  hiddenTestCases?: TestCaseDto[] | null; // Admin only
+  rubric?: Record<string, number> | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SanitizedQuestionDto {
+  id: string;
+  roundNumber: number;
+  type: QuestionType;
+  orderNumber: number;
+  caseNumber?: number | null;
+  title: string;
+  description: string;
+  starterCode?: string | null;
+  language?: string | null;
+  marks: number;
+  options?: string[] | null;
+  sampleTestCases?: TestCaseDto[] | null;
+  rubric?: Record<string, number> | null;
+}
+
+export interface CreateQuestionDto {
+  roundNumber: number;
+  type: QuestionType;
+  orderNumber: number;
+  caseNumber?: number | null;
+  title: string;
+  description: string;
+  starterCode?: string | null;
+  language?: string | null;
+  marks?: number;
+  options?: string[] | null;
+  correctOption?: number | null;
+  explanation?: string | null;
+  sampleTestCases?: TestCaseDto[] | null;
+  hiddenTestCases?: TestCaseDto[] | null;
+  rubric?: Record<string, number> | null;
+  isActive?: boolean;
+}
+
+export interface UpdateQuestionDto {
+  roundNumber?: number;
+  type?: QuestionType;
+  orderNumber?: number;
+  caseNumber?: number | null;
+  title?: string;
+  description?: string;
+  starterCode?: string | null;
+  language?: string | null;
+  marks?: number;
+  options?: string[] | null;
+  correctOption?: number | null;
+  explanation?: string | null;
+  sampleTestCases?: TestCaseDto[] | null;
+  hiddenTestCases?: TestCaseDto[] | null;
+  rubric?: Record<string, number> | null;
+  isActive?: boolean;
+}
+
+// ------------------------------------------------------------------------------
+// MCQ ARENA (ROUND 1)
+// ------------------------------------------------------------------------------
+
+export interface TeamMcqAnswerDto {
+  questionId: string;
+  selectedOption: number | null;
+  isFlagged: boolean;
+  savedAt: string;
+}
+
+export interface SaveMcqAnswerDto {
+  questionId: string;
+  selectedOption: number | null;
+  isFlagged?: boolean;
+}
+
+export interface McqArenaStateDto {
+  roundNumber: 1;
+  durationMinutes: number;
+  remainingSeconds: number;
+  isPaused: boolean;
+  isSubmitted: boolean;
+  questions: SanitizedQuestionDto[];
+  answers: Record<string, { selectedOption: number | null; isFlagged: boolean }>;
+}
+
+export interface SubmitMcqAnswersDto {
+  autoSubmit?: boolean;
+}
+
+export interface McqSubmissionResultDto {
+  totalQuestions: number;
+  answeredCount: number;
+  correctCount: number;
+  score: number;
+  maximumMarks: number;
+  submittedAt: string;
+}
+
+// ------------------------------------------------------------------------------
+// EVALUATION & MANUAL GRADING (ROUNDS 2 & 3)
+// ------------------------------------------------------------------------------
+
+export interface AdminSubmissionListItem {
+  id: string;
+  teamId: string;
+  teamName: string;
+  teamCode: string;
+  institution?: string | null;
+  roundNumber: number;
+  questionId?: string | null;
+  questionTitle?: string | null;
+  caseNumber?: number | null;
+  language: string;
+  submissionStatus: SubmissionStatus;
+  score?: number | null;
+  submittedAt: string;
+  evaluatedAt?: string | null;
+  evaluatorName?: string | null;
+}
+
+export interface AdminSubmissionDetailDto {
+  id: string;
+  teamId: string;
+  teamName: string;
+  teamCode: string;
+  institution?: string | null;
+  roundNumber: number;
+  questionId?: string | null;
+  questionTitle?: string | null;
+  questionDescription?: string | null;
+  starterCode?: string | null;
+  caseNumber?: number | null;
+  language: string;
+  sourceCode: string;
+  stdout?: string | null;
+  stderr?: string | null;
+  compileOutput?: string | null;
+  submissionStatus: SubmissionStatus;
+  score?: number | null;
+  testCaseResults?: any;
+  criteriaScores?: Record<string, number> | null;
+  feedback?: string | null;
+  submittedAt: string;
+  evaluatedAt?: string | null;
+  evaluatorName?: string | null;
+}
+
+export interface GradeSubmissionDto {
+  totalScore: number;
+  criteriaScores?: Record<string, number>;
+  feedback?: string;
+}
+
+
 
 

@@ -30,9 +30,10 @@ export class WorkspaceService {
 
     const draft = await this.prisma.workspaceDraft.findUnique({
       where: {
-        teamId_roundId: {
+        teamId_roundId_caseNumber: {
           teamId: teamUser.id,
           roundId: round.id,
+          caseNumber: 1,
         },
       },
     });
@@ -85,9 +86,10 @@ export class WorkspaceService {
     // 4. Stale request / version concurrency check
     const existing = await this.prisma.workspaceDraft.findUnique({
       where: {
-        teamId_roundId: {
+        teamId_roundId_caseNumber: {
           teamId: teamUser.id,
           roundId: round.id,
+          caseNumber: 1,
         },
       },
     });
@@ -105,14 +107,16 @@ export class WorkspaceService {
     // 5. Upsert workspace draft
     const updated = await this.prisma.workspaceDraft.upsert({
       where: {
-        teamId_roundId: {
+        teamId_roundId_caseNumber: {
           teamId: teamUser.id,
           roundId: round.id,
+          caseNumber: 1,
         },
       },
       create: {
         teamId: teamUser.id,
         roundId: round.id,
+        caseNumber: 1,
         sourceCode: dto.sourceCode,
         language: dto.language,
         version: 1,
