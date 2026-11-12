@@ -3,16 +3,11 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   ShieldAlert,
-  Users,
   LogOut,
-  Activity,
   Terminal,
   UserCheck,
-  FastForward,
   BookOpen,
-  FileCode,
   UserPlus,
-  Code2,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -28,6 +23,29 @@ export const Navbar: React.FC = () => {
   const isLanding = location.pathname === '/';
   const isActive = (path: string) => location.pathname === path;
 
+  const handleLogoClick = (e: React.MouseEvent) => {
+    if (isLanding) {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleRulesClick = (e: React.MouseEvent) => {
+    if (isLanding) {
+      e.preventDefault();
+      const el = document.getElementById('rules');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        // dispatch custom event or trigger highlight if possible
+        const hashEvent = new HashChangeEvent('hashchange');
+        window.location.hash = 'rules';
+        window.dispatchEvent(hashEvent);
+      }
+    } else {
+      navigate('/#rules');
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // 1. Landing Page Navbar (Futuristic Glowing Dark Glassmorphism)
   // ---------------------------------------------------------------------------
@@ -35,8 +53,12 @@ export const Navbar: React.FC = () => {
     return (
       <header className="sticky top-0 z-50 pt-3 sm:pt-4 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full pointer-events-auto">
         <div className="w-full bg-[#02130a]/80 backdrop-blur-xl border border-emerald-500/30 rounded-2xl px-4 sm:px-6 h-16 flex items-center justify-between shadow-[0_8px_32px_rgba(0,0,0,0.65)]">
-          {/* Brand */}
-          <Link to="/" className="flex items-center gap-3 group">
+          {/* Brand — clicking on / scrolls smoothly to top */}
+          <Link
+            to="/"
+            onClick={handleLogoClick}
+            className="flex items-center gap-3 group"
+          >
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/60 flex items-center justify-center text-emerald-400 shadow-[0_0_18px_rgba(16,185,129,0.5)] group-hover:scale-105 transition-transform">
               <Terminal className="w-5 h-5" />
             </div>
@@ -51,34 +73,19 @@ export const Navbar: React.FC = () => {
             </div>
           </Link>
 
-          {/* Navigation Links */}
+          {/* Center Navigation: STRICTLY Rules ONLY (Workspace & Status removed) */}
           <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-emerald-100/90 font-mono">
-            <Link
-              to={user?.type === 'TEAM' ? '/team/workspace' : '/workspace-preview'}
-              className="flex items-center gap-1.5 text-emerald-200/80 hover:text-emerald-300 hover:drop-shadow-[0_0_8px_rgba(16,185,129,0.8)] transition-all"
-            >
-              <Code2 className="w-4 h-4 text-emerald-400" />
-              <span>Workspace</span>
-            </Link>
-
-            <Link
-              to="/rules"
-              className="flex items-center gap-1.5 text-emerald-200/80 hover:text-emerald-300 hover:drop-shadow-[0_0_8px_rgba(16,185,129,0.8)] transition-all"
+            <button
+              type="button"
+              onClick={handleRulesClick}
+              className="flex items-center gap-1.5 text-emerald-200/80 hover:text-emerald-300 hover:drop-shadow-[0_0_8px_rgba(16,185,129,0.8)] transition-all cursor-pointer"
             >
               <BookOpen className="w-4 h-4 text-emerald-400" />
               <span>Rules</span>
-            </Link>
-
-            <Link
-              to="/status"
-              className="flex items-center gap-1.5 text-emerald-200/80 hover:text-emerald-300 hover:drop-shadow-[0_0_8px_rgba(16,185,129,0.8)] transition-all"
-            >
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Status</span>
-            </Link>
+            </button>
           </nav>
 
-          {/* User Session / Auth CTA */}
+          {/* User Session / Public Auth CTAs */}
           <div className="flex items-center gap-2 sm:gap-3">
             {user ? (
               <div className="flex items-center gap-3">
@@ -120,6 +127,16 @@ export const Navbar: React.FC = () => {
               </div>
             ) : (
               <div className="flex items-center gap-2 sm:gap-3">
+                {/* Mobile Rules Button */}
+                <button
+                  type="button"
+                  onClick={handleRulesClick}
+                  className="md:hidden p-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 text-emerald-200 hover:text-white transition-all"
+                  title="Rules"
+                >
+                  <BookOpen className="w-4 h-4 text-emerald-400" />
+                </button>
+
                 <Link
                   to="/register"
                   className="px-4 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 text-slate-950 transition-all shadow-[0_0_20px_rgba(16,185,129,0.6)] hover:shadow-[0_0_30px_rgba(16,185,129,0.9)] hover:scale-105 active:scale-95 flex items-center gap-1.5"
@@ -172,156 +189,125 @@ export const Navbar: React.FC = () => {
           </div>
         </Link>
 
-        {/* Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1">
-          {user?.type === 'ADMIN' && (
-            <>
-              <Link
-                to="/admin/competition"
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
-                  isActive('/admin/competition')
-                    ? 'bg-amber-100/80 text-amber-900 border border-amber-300'
-                    : 'text-amber-800 hover:text-amber-950 hover:bg-amber-50'
-                }`}
-              >
-                <FastForward className="w-4 h-4 text-amber-600" />
-                <span>Control Engine</span>
-              </Link>
-              <Link
-                to="/admin/dashboard"
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                  isActive('/admin/dashboard')
-                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                    : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
-                }`}
-              >
-                Dashboard
-              </Link>
-              <Link
-                to="/admin/teams"
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
-                  isActive('/admin/teams')
-                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                    : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
-                }`}
-              >
-                <Users className="w-4 h-4 text-emerald-600" />
-                <span>Teams</span>
-              </Link>
-            </>
-          )}
-
-          {user?.type === 'TEAM' && (
-            <>
-              <Link
-                to="/team/dashboard"
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                  isActive('/team/dashboard')
-                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                    : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
-                }`}
-              >
-                Team Arena
-              </Link>
-              <Link
-                to="/team/workspace"
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
-                  isActive('/team/workspace') ||
-                  isActive('/workspace') ||
-                  isActive('/workspace-preview')
-                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                    : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
-                }`}
-              >
-                <FileCode className="w-4 h-4 text-emerald-600" />
-                <span>Workspace</span>
-              </Link>
-            </>
-          )}
-
-          <Link
-            to="/rules"
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
-              isActive('/rules')
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
-            }`}
-          >
-            <BookOpen className="w-4 h-4 text-emerald-600" />
-            <span>Rules</span>
-          </Link>
-
-          <Link
-            to="/status"
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
-              isActive('/status')
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                : 'text-slate-600 hover:text-emerald-950 hover:bg-emerald-50/60'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Status</span>
-          </Link>
-        </nav>
-
-        {/* User Session Bar / Action */}
-        <div className="flex items-center gap-3">
-          {user ? (
-            <div className="flex items-center gap-3">
+        {/* Navigation / Role Context */}
+        {user ? (
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Team or Admin Role Badge */}
+            {user.type === 'TEAM' ? (
               <div className="hidden sm:flex flex-col text-right">
-                <span className="text-xs font-bold text-emerald-950">
-                  {user.type === 'ADMIN' ? user.fullName : user.teamName}
-                </span>
-                <span className="text-[11px] font-mono text-slate-500 flex items-center justify-end gap-1">
-                  {user.type === 'ADMIN' ? (
-                    <span className="text-amber-700 font-bold tracking-wider">
-                      [{user.role}]
-                    </span>
-                  ) : (
-                    <>
-                      <UserCheck className="w-3 h-3 text-emerald-600" />
-                      <span>{user.activeParticipant.fullName}</span>
-                      <span className="text-emerald-700 font-bold font-mono">
-                        ({user.teamCode})
-                      </span>
-                    </>
-                  )}
+                <span className="text-xs font-bold text-slate-800">{user.teamName}</span>
+                <span className="text-[11px] font-mono text-emerald-700 flex items-center justify-end gap-1">
+                  <UserCheck className="w-3 h-3 text-emerald-600" />
+                  <span>{user.activeParticipant.fullName}</span>
+                  <span className="text-slate-400 font-bold font-mono">({user.teamCode})</span>
                 </span>
               </div>
+            ) : (
+              <div className="hidden sm:flex flex-col text-right">
+                <span className="text-xs font-bold text-slate-800">{user.fullName}</span>
+                <span className="text-[11px] font-mono text-amber-700 font-semibold uppercase">
+                  [{user.role}]
+                </span>
+              </div>
+            )}
+
+            {/* Quick Links */}
+            <div className="flex items-center gap-2">
+              {user.type === 'TEAM' ? (
+                <>
+                  <Link
+                    to="/team/dashboard"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      isActive('/team/dashboard')
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    Dashboard
+                  </Link>
+                  <Link
+                    to="/team/workspace"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      isActive('/team/workspace')
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    Workspace
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/admin/dashboard"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      isActive('/admin/dashboard')
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    Dashboard
+                  </Link>
+                  <Link
+                    to="/admin/teams"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      isActive('/admin/teams')
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    Teams
+                  </Link>
+                  <Link
+                    to="/admin/competition"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      isActive('/admin/competition')
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    Rounds
+                  </Link>
+                </>
+              )}
 
               <button
                 onClick={handleLogout}
                 title="Log out"
-                className="p-2 rounded-lg bg-slate-100 border border-slate-200 hover:bg-rose-50 hover:border-rose-200 text-slate-600 hover:text-rose-600 transition-colors"
+                className="p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Link
-                to="/register"
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm shadow-emerald-600/20 flex items-center gap-1.5"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Register Team</span>
-              </Link>
-              <Link
-                to="/login"
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition-colors"
-              >
-                Team Login
-              </Link>
-              <Link
-                to="/admin/login"
-                className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 transition-colors flex items-center gap-1"
-              >
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
-                <span>Admin</span>
-              </Link>
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              to="/#rules"
+              className="text-xs font-semibold text-slate-600 hover:text-emerald-700 transition-colors px-2 py-1"
+            >
+              Rules
+            </Link>
+            <Link
+              to="/register"
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-colors shadow-sm"
+            >
+              Register Team
+            </Link>
+            <Link
+              to="/login"
+              className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors"
+            >
+              Team Login
+            </Link>
+            <Link
+              to="/admin/login"
+              className="px-2.5 py-1.5 rounded-lg text-slate-500 hover:text-amber-700 text-xs font-medium transition-colors"
+            >
+              Admin
+            </Link>
+          </div>
+        )}
       </div>
     </header>
   );
