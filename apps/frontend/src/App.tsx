@@ -16,6 +16,11 @@ import { TeamDashboardPage } from './pages/team/TeamDashboardPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { TeamManagementPage } from './pages/admin/TeamManagementPage';
 import { CompetitionControlPage } from './pages/admin/CompetitionControlPage';
+import { AnnouncementManagementPage } from './pages/admin/AnnouncementManagementPage';
+import { LeaderboardManagementPage } from './pages/admin/LeaderboardManagementPage';
+import { QuestionManagementPage } from './pages/admin/QuestionManagementPage';
+import { SubmissionsPage } from './pages/admin/SubmissionsPage';
+import { ReportsPage } from './pages/admin/ReportsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -116,6 +121,46 @@ export const App: React.FC = () => {
                 element={
                   <ProtectedRoute requiredType="ADMIN">
                     <TeamManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/announcements"
+                element={
+                  <ProtectedRoute requiredType="ADMIN">
+                    <AnnouncementManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/leaderboard"
+                element={
+                  <ProtectedRoute requiredType="ADMIN">
+                    <LeaderboardManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/questions"
+                element={
+                  <ProtectedRoute requiredType="ADMIN">
+                    <QuestionManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/submissions"
+                element={
+                  <ProtectedRoute requiredType="ADMIN">
+                    <SubmissionsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/reports"
+                element={
+                  <ProtectedRoute requiredType="ADMIN">
+                    <ReportsPage />
                   </ProtectedRoute>
                 }
               />
