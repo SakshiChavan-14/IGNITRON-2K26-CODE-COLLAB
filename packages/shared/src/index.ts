@@ -417,6 +417,20 @@ export interface CsvImportConfirmResult {
 // PHASE 04: GLOBAL COMPETITION CONTROL ENGINE & STATE MACHINE
 // ------------------------------------------------------------------------------
 
+export interface RoundSummaryDto {
+  roundNumber: number;
+  name: string;
+  description: string;
+  durationMinutes: number;
+  maximumMarks: number;
+  status: 'UPCOMING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+  eligibleCount: number;
+  participatingCount: number;
+  completedCount: number;
+  shortlistedCount: number;
+  isShortlistFinalized: boolean;
+}
+
 export interface CompetitionStateDto {
   id: string;
   status: CompetitionStatus;
@@ -434,6 +448,7 @@ export interface CompetitionStateDto {
   participatingTeamsCount: number;
   completedTeamsCount: number;
   validTransitions: string[];
+  rounds?: RoundSummaryDto[];
 }
 
 export type RoundControlAction =

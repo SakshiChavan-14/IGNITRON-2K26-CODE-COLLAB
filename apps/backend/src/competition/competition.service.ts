@@ -19,6 +19,7 @@ import {
   LeaderboardEntryDto,
   AuthUser,
   CompetitionRoundCardItem,
+  RoundSummaryDto,
 } from '@ignitron/shared';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -72,32 +73,61 @@ export class CompetitionService implements OnModuleInit {
     let participatingTeamsCount = 0;
     let completedTeamsCount = 0;
 
-    const totalTeamsCount = await this.prisma.team.count({
-      where: { isActive: true },
+    const totalTeamsCount = await this.prisma.team.count();
+
+    const dbRounds = await this.prisma.competitionRound.findMany({
+      orderBy: { roundNumber: 'asc' },
+      include: {
+        teamProgress: true,
+      },
+    });
+
+    const roundsSummary: RoundSummaryDto[] = dbRounds.map((r) => {
+      const eligible = r.teamProgress.filter((tp) => tp.eligibilityStatus === 'ELIGIBLE').length;
+      const participating = r.teamProgress.filter(
+        (tp) => tp.participationStatus === 'IN_PROGRESS' || tp.participationStatus === 'SUBMITTED',
+      ).length;
+      const completed = r.teamProgress.filter(
+        (tp) => tp.participationStatus === 'SUBMITTED',
+      ).length;
+
+      // Find if next round has shortlisted teams from this round
+      const nextRound = dbRounds.find((nr) => nr.roundNumber === r.roundNumber + 1);
+      const nextEligible = nextRound
+        ? nextRound.teamProgress.filter((tp) => tp.eligibilityStatus === 'ELIGIBLE').length
+        : 0;
+
+      return {
+        roundNumber: r.roundNumber,
+        name: r.name,
+        description: r.description,
+        durationMinutes: r.durationMinutes,
+        maximumMarks: Number(r.maximumMarks),
+        status: (r.status as any) || 'UPCOMING',
+        eligibleCount: eligible,
+        participatingCount: participating,
+        completedCount: completed,
+        shortlistedCount: nextEligible,
+        isShortlistFinalized: nextEligible > 0,
+      };
     });
 
     if (state.currentRoundNumber) {
-      const round = await this.prisma.competitionRound.findUnique({
-        where: { roundNumber: state.currentRoundNumber },
-        include: {
-          teamProgress: true,
-        },
-      });
-
-      if (round) {
-        currentRoundName = round.name;
-        eligibleTeamsCount = round.teamProgress.filter(
+      const currentRound = dbRounds.find((r) => r.roundNumber === state.currentRoundNumber);
+      if (currentRound) {
+        currentRoundName = currentRound.name;
+        eligibleTeamsCount = currentRound.teamProgress.filter(
           (tp) => tp.eligibilityStatus === 'ELIGIBLE',
         ).length;
-        participatingTeamsCount = round.teamProgress.filter(
+        participatingTeamsCount = currentRound.teamProgress.filter(
           (tp) => tp.participationStatus === 'IN_PROGRESS' || tp.participationStatus === 'SUBMITTED',
         ).length;
-        completedTeamsCount = round.teamProgress.filter(
+        completedTeamsCount = currentRound.teamProgress.filter(
           (tp) => tp.participationStatus === 'SUBMITTED',
         ).length;
       }
     } else {
-      eligibleTeamsCount = totalTeamsCount;
+      eligibleTeamsCount = await this.prisma.team.count({ where: { isActive: true } });
     }
 
     // Determine valid transitions from current state
@@ -129,6 +159,7 @@ export class CompetitionService implements OnModuleInit {
       participatingTeamsCount,
       completedTeamsCount,
       validTransitions,
+      rounds: roundsSummary,
     };
   }
 
