@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   ParseIntPipe,
   UseGuards,
   HttpCode,
@@ -19,6 +20,7 @@ import {
   RoundControlDto,
   ShortlistSubmissionDto,
   GenerateDemoDataDto,
+  BackendPublishLeaderboardDto,
 } from './dto/competition.dto';
 
 @Controller('competition')
@@ -86,6 +88,36 @@ export class CompetitionController {
   async getTeamCompetitionStatus(@CurrentUser() user: AuthTeamUser) {
     const status = await this.competitionService.getTeamCompetitionStatus(user.id);
     return { success: true, data: status };
+  }
+
+  /**
+   * Leaderboard: Get leaderboard entries. Non-admin users can only view published entries.
+   */
+  @Get('leaderboard')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'TEAM')
+  async getLeaderboard(
+    @CurrentUser() user: AuthUser,
+    @Query('roundNumber') roundNumber?: string,
+  ) {
+    const parsedRound = roundNumber ? parseInt(roundNumber, 10) : undefined;
+    const leaderboard = await this.competitionService.getLeaderboard(user, parsedRound);
+    return { success: true, data: leaderboard };
+  }
+
+  /**
+   * Leaderboard: Admin publish or unpublish leaderboard
+   */
+  @Post('leaderboard/publish')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  async publishLeaderboard(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BackendPublishLeaderboardDto,
+  ) {
+    const result = await this.competitionService.publishLeaderboard(dto, user.id);
+    return { success: true, data: result };
   }
 
   /**

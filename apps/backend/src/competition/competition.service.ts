@@ -15,12 +15,17 @@ import {
   TeamCompetitionStatusDto,
   CompetitionActivityLogItem,
   OFFICIAL_ROUNDS_CONFIG,
+  LeaderboardResponseDto,
+  LeaderboardEntryDto,
+  AuthUser,
+  CompetitionRoundCardItem,
 } from '@ignitron/shared';
 import { PrismaService } from '../database/prisma.service';
 import {
   RoundControlDto,
   ShortlistSubmissionDto,
   GenerateDemoDataDto,
+  BackendPublishLeaderboardDto,
 } from './dto/competition.dto';
 
 @Injectable()
@@ -784,6 +789,28 @@ export class CompetitionService implements OnModuleInit {
       this.prisma.team.findUnique({
         where: { id: teamId },
         include: {
+          participants: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              phone: true,
+              studentId: true,
+              isActive: true,
+            },
+          },
+          sessions: {
+            where: { status: 'ACTIVE' },
+            include: {
+              participant: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                },
+              },
+            },
+          },
           roundProgress: {
             include: { round: true },
             orderBy: { round: { roundNumber: 'asc' } },
@@ -850,10 +877,109 @@ export class CompetitionService implements OnModuleInit {
       evaluatedAt: p.evaluatedAt ? p.evaluatedAt.toISOString() : null,
     }));
 
+    // Active participant from live session
+    const activeSession = team.sessions?.find((s) => s.status === 'ACTIVE');
+    const activeParticipant = activeSession?.participant
+      ? {
+          id: activeSession.participant.id,
+          fullName: activeSession.participant.fullName,
+          email: activeSession.participant.email,
+        }
+      : null;
+
+    // Build official 3 round cards
+    const officialRounds = [
+      {
+        roundNumber: 1,
+        name: 'Round 1: MCQ Arena',
+        description: 'Fast-paced multiple choice screening covering CS fundamentals and DSA.',
+        durationMinutes: 30,
+        maximumMarks: 30,
+      },
+      {
+        roundNumber: 2,
+        name: 'Round 2: Bug Hunt Arena',
+        description: 'Find and fix edge case logic bugs and debugging puzzles.',
+        durationMinutes: 40,
+        maximumMarks: 100,
+      },
+      {
+        roundNumber: 3,
+        name: 'Round 3: Final Boss Coding',
+        description: 'Solve hard algorithmic challenges in full IDE workspace.',
+        durationMinutes: 60,
+        maximumMarks: 100,
+      },
+    ];
+
+    const roundCards: CompetitionRoundCardItem[] = officialRounds.map((def) => {
+      const dbRound = rounds.find((r) => r.roundNumber === def.roundNumber);
+      const prog = team.roundProgress.find((p) => p.round.roundNumber === def.roundNumber);
+
+      let teamEligibility: any = 'PENDING';
+      if (prog) {
+        teamEligibility = prog.eligibilityStatus;
+      } else if (def.roundNumber === 1 && team.isActive) {
+        teamEligibility = 'ELIGIBLE';
+      }
+
+      const pStatus: any = prog?.participationStatus || 'NOT_STARTED';
+      const isCurrent = state.currentRoundNumber === def.roundNumber;
+
+      const isCurrentActive =
+        isCurrent &&
+        teamEligibility === 'ELIGIBLE' &&
+        ((def.roundNumber === 1 && state.status === 'ROUND_1_ACTIVE') ||
+          (def.roundNumber === 2 && state.status === 'ROUND_2_ACTIVE') ||
+          (def.roundNumber === 3 && state.status === 'ROUND_3_ACTIVE'));
+
+      let cardStatus: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'NOT_QUALIFIED' = 'UPCOMING';
+      if (teamEligibility === 'INELIGIBLE') {
+        cardStatus = 'NOT_QUALIFIED';
+      } else if (
+        pStatus === 'SUBMITTED' ||
+        (state.currentRoundNumber && state.currentRoundNumber > def.roundNumber) ||
+        state.status === 'COMPLETED'
+      ) {
+        cardStatus = 'COMPLETED';
+      } else if (isCurrentActive) {
+        cardStatus = 'ACTIVE';
+      } else {
+        cardStatus = 'UPCOMING';
+      }
+
+      const isScorePublished = dbRound?.isLeaderboardPublished ?? false;
+      const score = isScorePublished && prog?.score !== null && prog?.score !== undefined ? Number(prog.score) : null;
+
+      return {
+        roundNumber: def.roundNumber,
+        name: dbRound?.name || def.name,
+        description: dbRound?.description || def.description,
+        durationMinutes: dbRound?.durationMinutes || def.durationMinutes,
+        maximumMarks: dbRound ? Number(dbRound.maximumMarks) : def.maximumMarks,
+        status: cardStatus,
+        teamEligibility,
+        participationStatus: pStatus,
+        isCurrent,
+        score,
+        isScorePublished,
+      };
+    });
+
     return {
       teamId: team.id,
       teamCode: team.teamCode,
       teamName: team.teamName,
+      institution: team.institution,
+      participants: team.participants.map((p) => ({
+        id: p.id,
+        fullName: p.fullName,
+        email: p.email,
+        phone: p.phone ?? undefined,
+        studentId: p.studentId ?? undefined,
+        isActive: p.isActive,
+      })),
+      activeParticipant,
       competitionStatus: state.status as CompetitionStatus,
       currentRound,
       eligibilityStatus,
@@ -864,6 +990,188 @@ export class CompetitionService implements OnModuleInit {
       isPaused: state.isPaused,
       remainingDurationSeconds: currentRemainingDuration,
       roundHistory,
+      roundCards,
+    };
+  }
+
+  /**
+   * Retrieves leaderboard entries with privacy and publish-state controls
+   */
+  async getLeaderboard(user?: AuthUser, roundNumber?: number): Promise<LeaderboardResponseDto> {
+    const isAdmin = user?.type === 'ADMIN';
+
+    // Specific round leaderboard
+    if (roundNumber) {
+      const round = await this.prisma.competitionRound.findUnique({
+        where: { roundNumber },
+      });
+
+      if (!round) {
+        return {
+          roundNumber,
+          isPublished: false,
+          publishedAt: null,
+          entries: [],
+        };
+      }
+
+      // If not admin and round leaderboard not published, do not expose scores
+      if (!isAdmin && !round.isLeaderboardPublished) {
+        return {
+          roundNumber,
+          isPublished: false,
+          publishedAt: null,
+          entries: [],
+        };
+      }
+
+      const progressList = await this.prisma.teamRoundProgress.findMany({
+        where: {
+          roundId: round.id,
+          team: { isActive: true },
+        },
+        include: {
+          team: true,
+        },
+        orderBy: [
+          { score: 'desc' },
+          { submittedAt: 'asc' },
+        ],
+      });
+
+      const entries: LeaderboardEntryDto[] = progressList.map((p, idx) => ({
+        rank: idx + 1,
+        teamId: isAdmin ? p.team.id : undefined,
+        teamCode: p.team.teamCode,
+        teamName: p.team.teamName,
+        institution: p.team.institution,
+        score: Number(p.score),
+        roundScores: {
+          [round.roundNumber]: Number(p.score),
+        },
+      }));
+
+      return {
+        roundNumber,
+        isPublished: round.isLeaderboardPublished,
+        publishedAt: round.leaderboardPublishedAt?.toISOString() || null,
+        entries,
+      };
+    }
+
+    // Overall tournament leaderboard
+    const allRounds = await this.prisma.competitionRound.findMany({
+      orderBy: { roundNumber: 'asc' },
+    });
+
+    const isAnyPublished = allRounds.some((r) => r.isLeaderboardPublished);
+
+    // If not admin and no rounds are published, return unpublished
+    if (!isAdmin && !isAnyPublished) {
+      return {
+        roundNumber: null,
+        isPublished: false,
+        publishedAt: null,
+        entries: [],
+      };
+    }
+
+    const teams = await this.prisma.team.findMany({
+      where: { isActive: true },
+      include: {
+        roundProgress: {
+          include: { round: true },
+        },
+      },
+    });
+
+    const rankedTeams = teams.map((team) => {
+      let totalScore = 0;
+      const roundScores: Record<number, number> = {};
+
+      for (const p of team.roundProgress) {
+        // Non-admin only gets scores from published rounds
+        if (isAdmin || p.round.isLeaderboardPublished) {
+          const sc = Number(p.score) || 0;
+          totalScore += sc;
+          roundScores[p.round.roundNumber] = sc;
+        }
+      }
+
+      return {
+        teamId: isAdmin ? team.id : undefined,
+        teamCode: team.teamCode,
+        teamName: team.teamName,
+        institution: team.institution,
+        score: totalScore,
+        roundScores,
+      };
+    });
+
+    rankedTeams.sort((a, b) => b.score - a.score);
+
+    const entries: LeaderboardEntryDto[] = rankedTeams.map((t, idx) => ({
+      rank: idx + 1,
+      teamId: t.teamId,
+      teamCode: t.teamCode,
+      teamName: t.teamName,
+      institution: t.institution,
+      score: t.score,
+      roundScores: t.roundScores,
+    }));
+
+    const latestPublishedAt = allRounds
+      .filter((r) => r.isLeaderboardPublished && r.leaderboardPublishedAt)
+      .sort(
+        (a, b) =>
+          (b.leaderboardPublishedAt?.getTime() || 0) -
+          (a.leaderboardPublishedAt?.getTime() || 0),
+      )[0]?.leaderboardPublishedAt;
+
+    return {
+      roundNumber: null,
+      isPublished: isAnyPublished,
+      publishedAt: latestPublishedAt?.toISOString() || null,
+      entries,
+    };
+  }
+
+  /**
+   * Publishes or unpublishes the leaderboard (Admin only)
+   */
+  async publishLeaderboard(dto: BackendPublishLeaderboardDto, adminId: string) {
+    const publishedAt = dto.isPublished ? new Date() : null;
+
+    if (dto.roundNumber) {
+      await this.prisma.competitionRound.updateMany({
+        where: { roundNumber: dto.roundNumber },
+        data: {
+          isLeaderboardPublished: dto.isPublished,
+          leaderboardPublishedAt: publishedAt,
+        },
+      });
+    } else {
+      await this.prisma.competitionRound.updateMany({
+        data: {
+          isLeaderboardPublished: dto.isPublished,
+          leaderboardPublishedAt: publishedAt,
+        },
+      });
+    }
+
+    await this.prisma.activityLog.create({
+      data: {
+        actorType: 'ADMIN',
+        actorId: adminId,
+        action: dto.isPublished ? 'LEADERBOARD_PUBLISHED' : 'LEADERBOARD_UNPUBLISHED',
+        description: `Admin ${dto.isPublished ? 'published' : 'unpublished'} leaderboard${dto.roundNumber ? ` for Round ${dto.roundNumber}` : ' for all rounds'}`,
+        metadata: { roundNumber: dto.roundNumber, isPublished: dto.isPublished },
+      },
+    });
+
+    return {
+      message: `Leaderboard ${dto.isPublished ? 'published' : 'unpublished'} successfully`,
+      isPublished: dto.isPublished,
     };
   }
 
