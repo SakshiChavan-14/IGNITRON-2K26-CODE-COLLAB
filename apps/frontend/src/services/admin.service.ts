@@ -93,6 +93,16 @@ export const adminService = {
       method: 'POST',
     });
   },
+
+  async exportTeamsCsv(): Promise<string> {
+    const res = await fetch('/api/admin/teams/export/csv', {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new Error('Failed to export CSV');
+    }
+    return res.text();
+  },
 };
 
 
