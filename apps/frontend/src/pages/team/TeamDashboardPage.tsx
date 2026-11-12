@@ -1,23 +1,45 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   useTeamCompetitionStatus,
   useServerTimer,
 } from '../../hooks/useCompetition';
+import { announcementService } from '../../services/announcement.service';
+import { competitionService } from '../../services/competition.service';
 import {
-  ShieldCheck,
-  UserCheck,
-  Award,
-  Clock,
+  AnnouncementItem,
+  LeaderboardResponseDto,
+  CompetitionRoundCardItem,
+} from '@ignitron/shared';
+import {
+  Terminal,
+  LogOut,
+  Users,
+  Building,
   Radio,
-  FileCode,
+  Clock,
+  Award,
+  Lock,
+  Megaphone,
+  Trophy,
+  CheckCircle2,
   XCircle,
+  FileCode,
+  ArrowRight,
 } from 'lucide-react';
 
 export const TeamDashboardPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
   const { data: teamStatus } = useTeamCompetitionStatus(!!user);
+
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+
+  const [leaderboard, setLeaderboard] = useState<LeaderboardResponseDto | null>(null);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
 
   const timer = useServerTimer(
     teamStatus?.deadlineAt,
@@ -25,255 +47,582 @@ export const TeamDashboardPage: React.FC = () => {
     teamStatus?.remainingDurationSeconds,
   );
 
+  useEffect(() => {
+    const loadAnnouncements = async () => {
+      try {
+        setLoadingAnnouncements(true);
+        const data = await announcementService.getPublishedAnnouncements();
+        setAnnouncements(data);
+      } catch (err) {
+        console.error('Failed to load published announcements', err);
+      } finally {
+        setLoadingAnnouncements(false);
+      }
+    };
+
+    const loadLeaderboard = async () => {
+      try {
+        setLoadingLeaderboard(true);
+        const data = await competitionService.getLeaderboard();
+        setLeaderboard(data);
+      } catch (err) {
+        console.error('Failed to load published leaderboard', err);
+      } finally {
+        setLoadingLeaderboard(false);
+      }
+    };
+
+    loadAnnouncements();
+    loadLeaderboard();
+  }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/', { replace: true });
+  };
+
   if (!user || user.type !== 'TEAM') {
     return null;
   }
 
-  const renderStatusBanner = () => {
-    if (!teamStatus) return null;
-    const status = teamStatus.competitionStatus;
-
-    if (status === 'STANDBY') {
-      return (
-        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-3 text-xs text-slate-300">
-          <Clock className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold text-white block mb-0.5">Competition in Standby</span>
-            <span>The tournament has not officially commenced. Verify team details and review the official rules while waiting for Round 1.</span>
-          </div>
-        </div>
-      );
+  const getPriorityBadge = (p: string) => {
+    switch (p) {
+      case 'URGENT':
+        return 'bg-rose-100 text-rose-800 border-rose-300';
+      case 'HIGH':
+        return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'LOW':
+        return 'bg-slate-100 text-slate-700 border-slate-300';
+      default:
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
     }
-
-    if (status.includes('ACTIVE')) {
-      if (teamStatus.isEligible) {
-        return (
-          <div className="p-5 rounded-xl bg-emerald-950/30 border border-emerald-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs text-emerald-300">
-            <div className="flex items-start gap-3">
-              <Radio className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5 animate-pulse" />
-              <div>
-                <span className="font-bold text-white text-sm block">
-                  Active Arena: {teamStatus.currentRound?.name}
-                </span>
-                <span className="text-emerald-200">
-                  Your team is ELIGIBLE. The official server countdown is running.
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="font-mono text-right">
-                <span className="text-[10px] uppercase text-emerald-400 block font-semibold">Remaining</span>
-                <span className="text-xl font-bold text-white">{timer.formatted}</span>
-              </div>
-
-              <Link
-                to="/workspace-preview"
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
-              >
-                <FileCode className="w-4 h-4" />
-                <span>Launch Workspace Preview</span>
-              </Link>
-            </div>
-          </div>
-        );
-      } else {
-        return (
-          <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 flex items-start gap-3 text-xs text-rose-300">
-            <XCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold text-rose-200 text-sm block mb-0.5">
-                Round Progression Status: Not Eligible
-              </span>
-              <span>Your team has not qualified for {teamStatus.currentRound?.name || 'this round'}. Thank you for your participation and sportsmanship.</span>
-            </div>
-          </div>
-        );
-      }
-    }
-
-    if (status.includes('EVALUATION')) {
-      return (
-        <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/50 flex items-start gap-3 text-xs text-amber-300">
-          <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold text-white block mb-0.5">Round Evaluation & Shortlisting in Progress</span>
-            <span>The current round has concluded. The evaluation panel is tallying results and conducting shortlisting for the next round.</span>
-          </div>
-        </div>
-      );
-    }
-
-    if (status === 'COMPLETED') {
-      return (
-        <div className="p-4 rounded-xl bg-sky-950/40 border border-sky-800/60 flex items-start gap-3 text-xs text-sky-300">
-          <Award className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold text-white block mb-0.5">Competition Concluded</span>
-            <span>All official rounds of IGNITRON 2K26 Code Relay have completed. Final results and award ceremonies have concluded.</span>
-          </div>
-        </div>
-      );
-    }
-
-    return null;
   };
 
-  const rounds = [
+  const getRoundStatusBadge = (card: CompetitionRoundCardItem) => {
+    switch (card.status) {
+      case 'ACTIVE':
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Active
+          </span>
+        );
+      case 'COMPLETED':
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 text-slate-500" />
+            Completed
+          </span>
+        );
+      case 'NOT_QUALIFIED':
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+            <XCircle className="w-3 h-3 text-rose-500" />
+            Not Qualified
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+            <Clock className="w-3 h-3 text-slate-400" />
+            Upcoming
+          </span>
+        );
+    }
+  };
+
+  // 3 fallback round cards if backend hasn't generated them yet
+  const defaultRoundCards: CompetitionRoundCardItem[] = [
     {
-      num: 1,
-      title: 'MCQ Arena',
-      desc: 'Rapid-fire algorithmic and systems knowledge assessment',
-      duration: '30 mins',
-      marks: '30 pts',
+      roundNumber: 1,
+      name: 'Round 1: MCQ Arena',
+      description: 'Rapid-fire screening covering CS fundamentals, DSA, and systems knowledge.',
+      durationMinutes: 30,
+      maximumMarks: 30,
+      status: 'UPCOMING',
+      teamEligibility: 'ELIGIBLE',
+      participationStatus: 'NOT_STARTED',
+      isCurrent: false,
     },
     {
-      num: 2,
-      title: 'Bug Hunt Arena',
-      desc: 'Identify and repair bugs in flawed production codebases',
-      duration: '40 mins',
-      marks: '100 pts',
+      roundNumber: 2,
+      name: 'Round 2: Bug Hunt Arena',
+      description: 'Analyze faulty codebases, pinpoint runtime flaws, and submit clean bug fixes.',
+      durationMinutes: 40,
+      maximumMarks: 100,
+      status: 'UPCOMING',
+      teamEligibility: 'PENDING',
+      participationStatus: 'NOT_STARTED',
+      isCurrent: false,
     },
     {
-      num: 3,
-      title: 'Final Boss Coding',
-      desc: 'High-complexity competitive algorithmic challenge',
-      duration: '60 mins',
-      marks: '100 pts',
+      roundNumber: 3,
+      name: 'Round 3: Final Boss Coding',
+      description: 'Tackle advanced competitive programming challenges in the full CodeMirror workspace.',
+      durationMinutes: 60,
+      maximumMarks: 100,
+      status: 'UPCOMING',
+      teamEligibility: 'PENDING',
+      participationStatus: 'NOT_STARTED',
+      isCurrent: false,
     },
   ];
 
+  const roundCards = teamStatus?.roundCards && teamStatus.roundCards.length > 0
+    ? teamStatus.roundCards
+    : defaultRoundCards;
+
+  const participants = teamStatus?.participants || [];
+  const participantA = participants[0];
+  const participantB = participants[1];
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Team Header Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 bottom-0 w-96 bg-gradient-to-l from-sky-500/10 to-transparent pointer-events-none" />
-
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase bg-sky-500/10 text-sky-400 border border-sky-500/30">
-                Official Contestant Team
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Session Active
-              </span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-              <span>{user.teamName}</span>
-              <span className="text-lg font-mono text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded-lg border border-sky-500/20">
-                {user.teamCode}
-              </span>
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              {user.institution || 'University Affiliation Verified'}
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-              <UserCheck className="w-5 h-5" />
+    <div className="min-h-screen bg-[#f8faf9] pb-16">
+      {/* 1. Header Banner */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-2xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Branding & Team Identification */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-xs">
+              <Terminal className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-                Active Relay Participant
+              <div className="flex items-center gap-2">
+                <span className="text-base font-extrabold text-emerald-950 tracking-tight">
+                  {user.teamName}
+                </span>
+                <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300">
+                  {user.teamCode}
+                </span>
               </div>
-              <div className="text-sm font-semibold text-white">
-                {user.activeParticipant.fullName}
-              </div>
-              <div className="text-[11px] font-mono text-slate-500">
-                {user.activeParticipant.email}
+              <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                <Building className="w-3 h-3 text-slate-400" />
+                <span>{user.institution || teamStatus?.institution || 'Affiliation Verified'}</span>
               </div>
             </div>
           </div>
+
+          {/* Active Participant & Logout */}
+          <div className="flex items-center gap-3">
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="text-left">
+                <span className="text-[10px] uppercase font-mono text-emerald-800 font-bold block leading-none">
+                  Active Terminal
+                </span>
+                <span className="font-semibold text-emerald-950">
+                  {user.activeParticipant.fullName}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs rounded-xl border border-slate-300 transition-colors flex items-center gap-1.5 shadow-2xs"
+            >
+              <LogOut className="w-3.5 h-3.5 text-slate-500" />
+              <span>Log Out</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* Dynamic Competition Status Banner */}
-      {renderStatusBanner()}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Section E: Live Tournament State & Concurrency Banner */}
+        {teamStatus && (
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+                <Radio className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400 font-bold block">
+                  Official Tournament Status
+                </span>
+                <h2 className="text-lg font-bold text-emerald-950">
+                  {teamStatus.competitionStatus === 'STANDBY'
+                    ? 'Standby Mode — Awaiting Round 1 Commencement'
+                    : teamStatus.competitionStatus.includes('ACTIVE')
+                    ? `Live: ${teamStatus.currentRound?.name || 'Round in Progress'}`
+                    : teamStatus.competitionStatus.includes('EVALUATION')
+                    ? 'Round Evaluation & Shortlisting Underway'
+                    : 'Competition Concluded'}
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Single-terminal relay concurrency active. Exactly one participant terminal can operate simultaneously.
+                </p>
+              </div>
+            </div>
 
-      {/* Strict Concurrency Policy Reminder Alert */}
-      <div className="p-4 rounded-xl bg-sky-950/30 border border-sky-800/50 flex items-start gap-3 text-xs text-sky-200">
-        <ShieldCheck className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <span className="font-semibold text-sky-300 block">
-            Single-Participant Relay Concurrency Active
-          </span>
-          <p className="text-slate-300 leading-relaxed">
-            Competition rules enforce exactly one active participant terminal per team. Your teammate cannot log in while you are actively authenticated. Remember to click <strong>Log Out</strong> before handoffs.
-          </p>
-        </div>
-      </div>
-
-      {/* Competition Rounds Progression Overview */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-            <Award className="w-5 h-5 text-amber-400" />
-            <span>Official Competition Rounds & Eligibility</span>
-          </h2>
-          <span className="text-xs font-mono text-slate-400">
-            Server Authoritative
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {rounds.map((round) => {
-            const history = teamStatus?.roundHistory.find(
-              (h) => h.roundNumber === round.num,
-            );
-            const isCurrent = teamStatus?.currentRound?.roundNumber === round.num;
-
-            return (
-              <div
-                key={round.num}
-                className={`p-5 rounded-xl border flex flex-col justify-between transition-colors ${
-                  isCurrent
-                    ? 'bg-sky-500/10 border-sky-500/40 shadow-lg shadow-sky-500/10'
-                    : 'bg-slate-900/60 border-slate-800'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-mono font-bold text-sky-400">
-                      ROUND 0{round.num}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase border ${
-                      history?.eligibilityStatus === 'ELIGIBLE'
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                        : history?.eligibilityStatus === 'INELIGIBLE'
-                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        : isCurrent && teamStatus?.isEligible
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
-                    }`}>
-                      {history?.eligibilityStatus || (isCurrent && teamStatus?.isEligible ? 'ELIGIBLE' : 'PENDING')}
-                    </span>
-                  </div>
-                  <h3 className="text-base font-bold text-white mb-1">
-                    {round.title}
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    {round.desc}
-                  </p>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-mono">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    {round.duration}
+            {teamStatus.competitionStatus.includes('ACTIVE') && (
+              <div className="flex items-center gap-4 bg-emerald-50/80 p-3 rounded-xl border border-emerald-200/80">
+                <div className="font-mono text-right">
+                  <span className="text-[10px] uppercase text-emerald-800 font-bold block">
+                    Server Countdown
                   </span>
-                  <span className="flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5 text-amber-500/70" />
-                    {round.marks}
+                  <span className="text-xl font-black text-emerald-950">
+                    {timer.formatted}
                   </span>
                 </div>
               </div>
-            );
-          })}
+            )}
+          </div>
+        )}
+
+        {/* Section A: Team Information Card */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-base font-bold text-emerald-950">
+                Team Profile & Contestants
+              </h2>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-50 text-emerald-800 border border-emerald-200">
+              Verified Roster
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Participant A Card */}
+            <div className={`p-5 rounded-2xl border transition-all ${
+              user.activeParticipant.id === participantA?.id
+                ? 'bg-emerald-50/60 border-emerald-300 ring-2 ring-emerald-500/20 shadow-2xs'
+                : 'bg-slate-50/70 border-slate-200'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-mono font-bold text-emerald-800 uppercase tracking-wider">
+                  Participant A
+                </span>
+                {user.activeParticipant.id === participantA?.id ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Currently Authenticated
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Relay Partner
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-base font-bold text-emerald-950">
+                  {participantA?.fullName || user.activeParticipant.fullName}
+                </div>
+                <div className="text-xs text-slate-600 font-mono">
+                  {participantA?.email || user.activeParticipant.email}
+                </div>
+                {participantA?.phone && (
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    Phone: {participantA.phone}
+                  </div>
+                )}
+                {participantA?.studentId && (
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    ID / Roll: {participantA.studentId}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Participant B Card */}
+            <div className={`p-5 rounded-2xl border transition-all ${
+              participantB && user.activeParticipant.id === participantB.id
+                ? 'bg-emerald-50/60 border-emerald-300 ring-2 ring-emerald-500/20 shadow-2xs'
+                : 'bg-slate-50/70 border-slate-200'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-mono font-bold text-emerald-800 uppercase tracking-wider">
+                  Participant B
+                </span>
+                {participantB && user.activeParticipant.id === participantB.id ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Currently Authenticated
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Relay Partner
+                  </span>
+                )}
+              </div>
+
+              {participantB ? (
+                <div className="space-y-1.5">
+                  <div className="text-base font-bold text-emerald-950">
+                    {participantB.fullName}
+                  </div>
+                  <div className="text-xs text-slate-600 font-mono">
+                    {participantB.email}
+                  </div>
+                  {participantB.phone && (
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      Phone: {participantB.phone}
+                    </div>
+                  )}
+                  {participantB.studentId && (
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      ID / Roll: {participantB.studentId}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 font-mono py-4">
+                  Registered teammate details stored in tournament database.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+
+        {/* Section B: Competition Status & 3 Round Cards */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Award className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-base font-bold text-emerald-950">
+                Official Tournament Arenas
+              </h2>
+            </div>
+            <span className="text-xs font-mono text-slate-400">
+              3 Sequential Elimination Stages
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {roundCards.map((card) => {
+              const canLaunch =
+                card.status === 'ACTIVE' &&
+                card.teamEligibility === 'ELIGIBLE' &&
+                !teamStatus?.isPaused;
+
+              return (
+                <div
+                  key={card.roundNumber}
+                  className={`p-6 rounded-2xl border transition-all flex flex-col justify-between ${
+                    card.status === 'ACTIVE'
+                      ? 'bg-white border-emerald-300 ring-2 ring-emerald-500/20 shadow-md'
+                      : card.status === 'COMPLETED'
+                      ? 'bg-white border-slate-200 shadow-xs'
+                      : card.status === 'NOT_QUALIFIED'
+                      ? 'bg-rose-50/40 border-rose-200 shadow-xs'
+                      : 'bg-white border-slate-200 shadow-xs'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold text-emerald-800 uppercase tracking-wider">
+                        Stage 0{card.roundNumber}
+                      </span>
+                      {getRoundStatusBadge(card)}
+                    </div>
+
+                    <h3 className="text-lg font-bold text-emerald-950">
+                      {card.name}
+                    </h3>
+
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {card.description}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs font-mono text-slate-500">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{card.durationMinutes} Minutes</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Award className="w-3.5 h-3.5 text-amber-500" />
+                        <span>{card.maximumMarks} Marks</span>
+                      </div>
+                    </div>
+
+                    {card.isScorePublished && card.score !== null && card.score !== undefined && (
+                      <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-mono font-bold">
+                        Published Round Score: {card.score} pts
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-slate-100">
+                    {canLaunch ? (
+                      <button
+                        onClick={() => navigate('/team/workspace')}
+                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
+                      >
+                        <FileCode className="w-4 h-4" />
+                        <span>Launch Arena Workspace</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <div className="w-full py-2 px-3 rounded-xl bg-slate-100 text-slate-400 font-semibold text-xs flex items-center justify-center gap-2 text-center select-none">
+                        <Lock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>
+                          {card.status === 'COMPLETED'
+                            ? 'Arena Completed'
+                            : card.status === 'NOT_QUALIFIED'
+                            ? 'Round Locked — Not Qualified'
+                            : 'Inactive — Locked by Admin'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 2-Column: Section C: Published Announcements & Section D: Published Leaderboard */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Section C: Announcements */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col justify-between">
+            <div>
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-500 font-bold">
+                  <Megaphone className="w-4 h-4 text-emerald-600" />
+                  <span>Official Announcements ({announcements.length})</span>
+                </div>
+                <span className="text-[11px] font-mono text-slate-400">
+                  Verified Broadcasts
+                </span>
+              </div>
+
+              {loadingAnnouncements ? (
+                <div className="p-8 text-center text-xs font-mono text-slate-400">
+                  Checking for live announcements...
+                </div>
+              ) : announcements.length === 0 ? (
+                <div className="p-8 text-center space-y-2">
+                  <Megaphone className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-600">No active announcements broadcast.</p>
+                  <p className="text-[11px] text-slate-400">Admin briefings will appear here in real time.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                  {announcements.map((item) => (
+                    <div key={item.id} className="p-4 hover:bg-slate-50/70 transition-colors space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border ${getPriorityBadge(
+                            item.priority,
+                          )}`}
+                        >
+                          {item.priority}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {new Date(item.createdAt).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-emerald-950">
+                        {item.title}
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                        {item.message}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section D: Leaderboard */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col justify-between">
+            <div>
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-500 font-bold">
+                  <Trophy className="w-4 h-4 text-emerald-600" />
+                  <span>Competition Leaderboard</span>
+                </div>
+                {leaderboard?.isPublished ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    Published
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                    Confidential
+                  </span>
+                )}
+              </div>
+
+              {loadingLeaderboard ? (
+                <div className="p-8 text-center text-xs font-mono text-slate-400">
+                  Retrieving official standings...
+                </div>
+              ) : !leaderboard || !leaderboard.isPublished ? (
+                /* Leaderboard NOT published - strictly hide scores & show informative placeholder */
+                <div className="p-8 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
+                    <Lock className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-700">
+                      Leaderboard Will Be Released by Administrators
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto leading-relaxed">
+                      Official scores and tournament rankings remain confidential during live evaluation. Results will be published once verified by the panel.
+                    </p>
+                  </div>
+                </div>
+              ) : leaderboard.entries.length === 0 ? (
+                <div className="p-8 text-center space-y-2">
+                  <Trophy className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-600">No leaderboard entries published yet.</p>
+                </div>
+              ) : (
+                /* Leaderboard published - display ranked list */
+                <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                  {leaderboard.entries.map((entry) => {
+                    const isMyTeam = entry.teamCode === user.teamCode;
+                    return (
+                      <div
+                        key={entry.teamCode || entry.teamName}
+                        className={`p-3.5 flex items-center justify-between text-xs transition-colors ${
+                          isMyTeam ? 'bg-emerald-50/70 border-l-4 border-emerald-600' : 'hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black font-mono ${
+                              entry.rank === 1
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : entry.rank === 2
+                                ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                                : entry.rank === 3
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'text-slate-500'
+                            }`}
+                          >
+                            {entry.rank}
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-1.5 font-bold text-emerald-950">
+                              <span>{entry.teamName}</span>
+                              {isMyTeam && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold">
+                                  Your Team
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {entry.institution || 'Verified College'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right font-mono font-black text-sm text-emerald-700">
+                          {entry.score} pts
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 };
