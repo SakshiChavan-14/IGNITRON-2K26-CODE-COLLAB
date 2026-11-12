@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   useCompetitionState,
   useServerTimer,
@@ -10,7 +10,6 @@ import {
   Play,
   Pause,
   Square,
-  FastForward,
   RotateCcw,
   CheckCircle2,
   Users,
@@ -19,6 +18,12 @@ import {
   Radio,
   Sparkles,
   RefreshCw,
+  Search,
+  Check,
+  Lock,
+  Clock,
+  Sliders,
+  ShieldCheck,
 } from 'lucide-react';
 
 const COMPETITION_STEPS: Array<{ status: CompetitionStatus; label: string; desc: string }> = [
@@ -44,6 +49,7 @@ export const CompetitionControlPage: React.FC = () => {
 
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Shortlisting Modal State
   const [showShortlistModal, setShowShortlistModal] = useState(false);
@@ -52,20 +58,28 @@ export const CompetitionControlPage: React.FC = () => {
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [shortlistLoading, setShortlistLoading] = useState(false);
 
+  // Shortlisting Filters, Search & Sort
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUBMITTED' | 'IN_PROGRESS' | 'NOT_STARTED'>('ALL');
+  const [sortBy, setSortBy] = useState<'RANK' | 'SCORE_ASC' | 'NAME_ASC'>('RANK');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
   // Reset Modal State
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetType, setResetType] = useState<'DEMO_ONLY' | 'FULL_RESET'>('DEMO_ONLY');
 
   const executeControl = async (action: any, extraPayload: any = {}) => {
     setErrorMsg(null);
+    setSuccessMsg(null);
     setLoadingAction(action);
     try {
-      await competitionService.executeControl({
+      const res = await competitionService.executeControl({
         action,
         ...extraPayload,
       });
       await refetchState();
       await refetchLogs();
+      setSuccessMsg(res?.message || 'Control action executed successfully.');
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to execute control action');
     } finally {
@@ -76,32 +90,46 @@ export const CompetitionControlPage: React.FC = () => {
   const handleOpenShortlisting = async (roundNum: number) => {
     setTargetRound(roundNum);
     setErrorMsg(null);
+    setSuccessMsg(null);
     setShortlistLoading(true);
     setShowShortlistModal(true);
+    setSearchQuery('');
+    setStatusFilter('ALL');
+    setSortBy('RANK');
     try {
       const teams = await competitionService.getShortlistingTeams(roundNum);
       setCandidateTeams(teams);
-      // Pre-select already eligible teams
+      // Pre-select teams that are already marked ELIGIBLE for target round
       const preSelected = new Set(
         teams.filter((t) => t.nextRoundEligibility === 'ELIGIBLE').map((t) => t.teamId),
       );
       setSelectedTeamIds(preSelected);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to load candidates for shortlisting');
+      setErrorMsg(err?.message || 'Failed to load candidate teams for shortlisting');
       setShowShortlistModal(false);
     } finally {
       setShortlistLoading(false);
     }
   };
 
+  const handleSelectAllFiltered = (filteredIds: string[]) => {
+    const next = new Set(selectedTeamIds);
+    filteredIds.forEach((id) => next.add(id));
+    setSelectedTeamIds(next);
+  };
+
+  const handleDeselectAllFiltered = (filteredIds: string[]) => {
+    const next = new Set(selectedTeamIds);
+    filteredIds.forEach((id) => next.delete(id));
+    setSelectedTeamIds(next);
+  };
+
   const handleAutoSelectTop = (ratioOrCount: number) => {
     const sorted = [...candidateTeams].sort((a, b) => b.score - a.score);
     let countToSelect = 0;
     if (ratioOrCount < 1) {
-      // ratio e.g. 0.5 (top 50%)
       countToSelect = Math.ceil(sorted.length * ratioOrCount);
     } else {
-      // absolute count e.g. 6
       countToSelect = Math.min(sorted.length, ratioOrCount);
     }
     const chosen = new Set(sorted.slice(0, countToSelect).map((t) => t.teamId));
@@ -113,15 +141,17 @@ export const CompetitionControlPage: React.FC = () => {
       alert('Please select at least one team to qualify.');
       return;
     }
+    setShowConfirmModal(false);
     setShortlistLoading(true);
     try {
-      await competitionService.submitShortlisting({
+      const res = await competitionService.submitShortlisting({
         roundNumber: targetRound,
         qualifiedTeamIds: Array.from(selectedTeamIds),
       });
       setShowShortlistModal(false);
       await refetchState();
       await refetchLogs();
+      setSuccessMsg(`Successfully finalized shortlist for Round ${targetRound}: ${res.qualifiedCount} teams qualified!`);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to commit shortlisting decisions');
     } finally {
@@ -136,7 +166,7 @@ export const CompetitionControlPage: React.FC = () => {
       await competitionService.generateDemoData(20);
       await refetchState();
       await refetchLogs();
-      alert('20 demonstration teams generated successfully.');
+      setSuccessMsg('20 demonstration teams generated successfully.');
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to generate demo teams');
     } finally {
@@ -144,392 +174,846 @@ export const CompetitionControlPage: React.FC = () => {
     }
   };
 
+  // Filter and sort candidate teams
+  const filteredCandidates = useMemo(() => {
+    let list = [...candidateTeams];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.teamName.toLowerCase().includes(q) ||
+          t.teamCode.toLowerCase().includes(q) ||
+          (t.institution && t.institution.toLowerCase().includes(q)),
+      );
+    }
+    if (statusFilter !== 'ALL') {
+      list = list.filter((t) => t.participationStatus === statusFilter);
+    }
+    if (sortBy === 'RANK') {
+      list.sort((a, b) => b.score - a.score);
+    } else if (sortBy === 'SCORE_ASC') {
+      list.sort((a, b) => a.score - b.score);
+    } else if (sortBy === 'NAME_ASC') {
+      list.sort((a, b) => a.teamName.localeCompare(b.teamName));
+    }
+    return list;
+  }, [candidateTeams, searchQuery, statusFilter, sortBy]);
+
   const currentStepIndex = COMPETITION_STEPS.findIndex(
     (s) => s.status === compState?.status,
   );
 
+  // Round summary lookups
+  const r1Summary = compState?.rounds?.find((r) => r.roundNumber === 1);
+  const r2Summary = compState?.rounds?.find((r) => r.roundNumber === 2);
+  const r3Summary = compState?.rounds?.find((r) => r.roundNumber === 3);
+
+  // Derived state checks for independent round progression
+  const isR1Completed =
+    compState?.status === 'ROUND_1_EVALUATION' ||
+    compState?.status === 'ROUND_2_ACTIVE' ||
+    compState?.status === 'ROUND_2_EVALUATION' ||
+    compState?.status === 'ROUND_3_ACTIVE' ||
+    compState?.status === 'FINAL_EVALUATION' ||
+    compState?.status === 'COMPLETED';
+
+  const isR2Completed =
+    compState?.status === 'ROUND_2_EVALUATION' ||
+    compState?.status === 'ROUND_3_ACTIVE' ||
+    compState?.status === 'FINAL_EVALUATION' ||
+    compState?.status === 'COMPLETED';
+
+  const isR3Completed =
+    compState?.status === 'FINAL_EVALUATION' || compState?.status === 'COMPLETED';
+
+  const r2ShortlistCount = r2Summary?.eligibleCount ?? 0;
+  const isR2ShortlistFinalized = r2ShortlistCount > 0;
+
+  const r3ShortlistCount = r3Summary?.eligibleCount ?? 0;
+  const isR3ShortlistFinalized = r3ShortlistCount > 0;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-            <span>Global Competition Control Engine</span>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold uppercase bg-sky-500/10 text-sky-400 border border-sky-500/30">
-              Server Authoritative
-            </span>
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Authoritative tournament state machine, server countdown timers, and progressive shortlisting
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleGenerateDemoTeams}
-            disabled={!!loadingAction}
-            className="px-3 py-2 bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-300 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-            <span>Seed Demo Roster (20 Teams)</span>
-          </button>
-
-          <button
-            onClick={() => setShowResetModal(true)}
-            className="px-3 py-2 bg-slate-900 border border-slate-800 hover:bg-rose-950/40 hover:border-rose-800/60 text-slate-400 hover:text-rose-400 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset State</span>
-          </button>
-        </div>
-      </div>
-
-      {errorMsg && (
-        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 flex items-start gap-3 text-rose-300 text-xs">
-          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+    <div className="min-h-screen bg-[#f8faf9] pb-16">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 pt-4">
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
           <div>
-            <span className="font-semibold block mb-0.5">Control Engine Error</span>
-            <span>{errorMsg}</span>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-950 flex items-center gap-3">
+              <span>Competition Control Center</span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                Tournament Command
+              </span>
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Authoritative tournament state machine, independent round orchestrators & shortlisting progression.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleGenerateDemoTeams}
+              disabled={!!loadingAction}
+              className="px-3.5 py-2 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Seed Demo Roster (20 Teams)</span>
+            </button>
+
+            <button
+              onClick={() => setShowResetModal(true)}
+              className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-rose-50 hover:border-rose-300 text-slate-700 hover:text-rose-700 text-xs font-bold rounded-xl transition shadow-2xs flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset State</span>
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Visual Round Progression Stepper */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
-        <h2 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-6">
-          Sequential Tournament State Machine
-        </h2>
+        {/* Feedback alerts */}
+        {errorMsg && (
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-3 text-rose-900 text-xs shadow-2xs">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-600" />
+            <div>
+              <span className="font-bold block mb-0.5">Control Action Notice</span>
+              <span>{errorMsg}</span>
+            </div>
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-          {COMPETITION_STEPS.map((step, idx) => {
-            const isCurrent = step.status === compState?.status;
-            const isCompleted = currentStepIndex > idx;
+        {successMsg && (
+          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-3 text-emerald-900 text-xs shadow-2xs">
+            <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
+            <div>
+              <span className="font-bold block mb-0.5">Operation Succeeded</span>
+              <span>{successMsg}</span>
+            </div>
+          </div>
+        )}
 
-            return (
-              <div
-                key={step.status}
-                className={`p-3 rounded-xl border flex flex-col justify-between transition-all ${
-                  isCurrent
-                    ? 'bg-sky-500/10 border-sky-500/50 shadow-lg shadow-sky-500/10'
-                    : isCompleted
-                    ? 'bg-slate-950/60 border-emerald-800/40 text-slate-400'
-                    : 'bg-slate-950/40 border-slate-800/60 text-slate-600'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] font-mono font-bold">
-                      0{idx + 1}
+        {/* SECTION A: Competition Overview & Authoritative Clock */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left 2 Cols: Live Clock & Status */}
+          <div className="lg:col-span-2 p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-mono font-bold text-emerald-800 uppercase tracking-widest block mb-1">
+                  Server-Authoritative Clock
+                </span>
+                <div className="flex items-baseline gap-3">
+                  <span
+                    className={`text-4xl sm:text-5xl font-mono font-black tracking-wider ${
+                      compState?.isPaused ? 'text-amber-600' : 'text-emerald-950'
+                    }`}
+                  >
+                    {compState?.status.includes('ACTIVE') ? timer.formatted : '--:--:--'}
+                  </span>
+                  {compState?.isPaused && (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold uppercase bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                      Timer Paused
                     </span>
-                    {isCurrent ? (
-                      <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
-                    ) : isCompleted ? (
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    ) : null}
-                  </div>
-                  <div className={`text-xs font-bold leading-tight ${isCurrent ? 'text-white' : ''}`}>
-                    {step.label}
-                  </div>
-                </div>
-                <div className="text-[10px] text-slate-500 mt-2 font-mono">
-                  {step.desc}
+                  )}
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
 
-      {/* Active State Command Center & Live Timer Banner */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Timer & State Controls */}
-        <div className="lg:col-span-2 p-6 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950/30 border border-slate-800 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <span className="text-xs font-mono text-slate-400 uppercase tracking-widest block mb-1">
-                Authoritative Server Clock
-              </span>
-              <div className="flex items-baseline gap-4">
-                <span className={`text-4xl sm:text-5xl font-mono font-black tracking-wider ${
-                  compState?.isPaused ? 'text-amber-400' : 'text-white'
-                }`}>
-                  {compState?.status.includes('ACTIVE')
-                    ? timer.formatted
-                    : '--:--:--'}
+              <div className="text-left sm:text-right">
+                <span className="text-xs font-mono font-semibold text-slate-500 uppercase block mb-1">
+                  Active Tournament Phase
                 </span>
-                {compState?.isPaused && (
-                  <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 animate-pulse">
-                    Timer Paused
+                <span className="text-sm sm:text-base font-extrabold text-emerald-900 font-mono bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg inline-block">
+                  {compState?.status}
+                </span>
+                <div className="text-xs text-slate-500 font-mono mt-1">
+                  Round: {compState?.currentRoundName || 'Standby'}
+                </div>
+              </div>
+            </div>
+
+            {/* Participation Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-100">
+              <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200">
+                <span className="text-[11px] font-semibold text-slate-500 block">Total Registered</span>
+                <span className="text-xl font-bold font-mono text-emerald-950">{compState?.totalTeamsCount ?? 0}</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Teams</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200">
+                <span className="text-[11px] font-semibold text-emerald-800 block">Current Eligible</span>
+                <span className="text-xl font-bold font-mono text-emerald-900">{compState?.eligibleTeamsCount ?? 0}</span>
+                <span className="text-[10px] text-emerald-700 block mt-0.5">Teams</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-sky-50/60 border border-sky-200">
+                <span className="text-[11px] font-semibold text-sky-800 block">Active In-Arena</span>
+                <span className="text-xl font-bold font-mono text-sky-950">{compState?.participatingTeamsCount ?? 0}</span>
+                <span className="text-[10px] text-sky-700 block mt-0.5">Teams</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200">
+                <span className="text-[11px] font-semibold text-amber-800 block">Submissions Finished</span>
+                <span className="text-xl font-bold font-mono text-amber-950">{compState?.completedTeamsCount ?? 0}</span>
+                <span className="text-[10px] text-amber-700 block mt-0.5">Teams</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right 1 Col: Sequential Stepper Summary */}
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
+            <h3 className="text-xs font-mono uppercase tracking-wider text-emerald-900 font-bold flex items-center gap-2">
+              <Sliders className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Progression State Machine</span>
+            </h3>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {COMPETITION_STEPS.map((step, idx) => {
+                const isCurrent = step.status === compState?.status;
+                const isCompleted = currentStepIndex > idx;
+
+                return (
+                  <div
+                    key={step.status}
+                    className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition-all ${
+                      isCurrent
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold shadow-2xs'
+                        : isCompleted
+                        ? 'bg-slate-50 border-slate-200 text-slate-500'
+                        : 'bg-white border-slate-100 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-slate-400">0{idx + 1}</span>
+                      <span className="truncate">{step.label}</span>
+                    </div>
+
+                    {isCurrent ? (
+                      <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse shrink-0" />
+                    ) : isCompleted ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <span className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION B: Three Independent Round Control Cards */}
+        <div>
+          <div className="mb-4">
+            <h2 className="text-base font-bold text-emerald-950">Independent Competition Arenas</h2>
+            <p className="text-xs text-slate-500">
+              Each round operates independently with dedicated server countdown, progression gates, and administrative triggers.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* CARD 1: Round 1 — MCQ Arena */}
+            <div
+              className={`p-6 rounded-2xl border transition-all flex flex-col justify-between ${
+                compState?.status === 'ROUND_1_ACTIVE'
+                  ? 'bg-white border-emerald-400 shadow-md ring-2 ring-emerald-500/10'
+                  : 'bg-white border-slate-200/90 shadow-2xs'
+              }`}
+            >
+              <div className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 font-bold">
+                    R1
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
+                      compState?.status === 'ROUND_1_ACTIVE'
+                        ? compState?.isPaused
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : isR1Completed
+                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                        : 'bg-slate-50 text-slate-400 border border-slate-200'
+                    }`}
+                  >
+                    {compState?.status === 'ROUND_1_ACTIVE'
+                      ? compState?.isPaused
+                        ? 'PAUSED'
+                        : 'ACTIVE'
+                      : isR1Completed
+                      ? 'COMPLETED'
+                      : 'NOT STARTED'}
                   </span>
+                </div>
+
+                <div>
+                  <h3 className="text-base font-bold text-emerald-950">Round 1: MCQ Arena</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    15 conceptual multiple choice questions. Individual team terminals.
+                  </p>
+                  <div className="flex items-center gap-3 mt-2 text-xs font-mono text-emerald-800">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> 30 Minutes
+                    </span>
+                    <span>•</span>
+                    <span className="font-bold">30 Marks</span>
+                  </div>
+                </div>
+
+                {/* Round 1 Stats */}
+                <div className="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100 font-mono">
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-[10px] text-slate-500 block">Eligible</span>
+                    <span className="font-bold text-slate-800">{r1Summary?.eligibleCount ?? compState?.totalTeamsCount ?? 0}</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-[10px] text-slate-500 block">Completed</span>
+                    <span className="font-bold text-slate-800">{r1Summary?.completedCount ?? 0}</span>
+                  </div>
+                </div>
+
+                {isR1Completed && (
+                  <div className="p-2.5 rounded-xl bg-violet-50/70 border border-violet-200 text-xs text-violet-900 flex items-center justify-between">
+                    <span className="font-medium">Shortlist for R2:</span>
+                    <span className="font-mono font-bold text-violet-800">
+                      {r2ShortlistCount > 0 ? `${r2ShortlistCount} Teams Finalized` : 'Pending Selection'}
+                    </span>
+                  </div>
                 )}
               </div>
-            </div>
 
-            <div className="text-left sm:text-right">
-              <span className="text-xs font-mono text-slate-400 uppercase block mb-0.5">
-                Current Status
-              </span>
-              <span className="text-base font-bold text-sky-400 font-mono">
-                {compState?.status}
-              </span>
-              <div className="text-[11px] text-slate-500 font-mono">
-                Round: {compState?.currentRoundName || 'None'}
-              </div>
-            </div>
-          </div>
-
-          {/* Action Control Buttons Grid */}
-          <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center gap-3">
-            {/* When in STANDBY */}
-            {compState?.status === 'STANDBY' && (
-              <button
-                onClick={() => executeControl('START_ROUND_1')}
-                disabled={!!loadingAction}
-                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
-              >
-                <Play className="w-4 h-4 fill-current" />
-                <span>Start Round 1: MCQ Arena</span>
-              </button>
-            )}
-
-            {/* When active round live */}
-            {compState?.status.includes('ACTIVE') && (
-              <>
-                {compState.isPaused ? (
+              {/* Card 1 Actions */}
+              <div className="pt-6 border-t border-slate-100 space-y-2">
+                {compState?.status === 'STANDBY' && (
                   <button
-                    onClick={() => executeControl('RESUME_ROUND')}
+                    onClick={() => executeControl('START_ROUND_1')}
                     disabled={!!loadingAction}
-                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5"
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Resume Timer</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => executeControl('PAUSE_ROUND')}
-                    disabled={!!loadingAction}
-                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    <Pause className="w-3.5 h-3.5 fill-current" />
-                    <span>Pause Timer</span>
+                    <span>Start Round 1</span>
                   </button>
                 )}
 
-                <button
-                  onClick={() => {
-                    if (window.confirm('Conclude active round now and enter evaluation mode?')) {
-                      executeControl('END_ROUND');
-                    }
-                  }}
-                  disabled={!!loadingAction}
-                  className="px-4 py-2 bg-slate-800 hover:bg-rose-950/60 hover:border-rose-800 text-rose-300 font-semibold text-xs rounded-lg border border-slate-700 transition-colors flex items-center gap-1.5"
-                >
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                  <span>End Active Round</span>
-                </button>
-              </>
-            )}
+                {compState?.status === 'ROUND_1_ACTIVE' && (
+                  <div className="space-y-2">
+                    {compState.isPaused ? (
+                      <button
+                        onClick={() => executeControl('RESUME_ROUND')}
+                        disabled={!!loadingAction}
+                        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Resume Timer</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => executeControl('PAUSE_ROUND')}
+                        disabled={!!loadingAction}
+                        className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                      >
+                        <Pause className="w-3.5 h-3.5 fill-current" />
+                        <span>Pause Round 1</span>
+                      </button>
+                    )}
 
-            {/* When in Round 1 Evaluation */}
-            {compState?.status === 'ROUND_1_EVALUATION' && (
-              <>
-                <button
-                  onClick={() => handleOpenShortlisting(2)}
-                  className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-md shadow-violet-600/20"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Shortlist for Round 2 (Top 50%)</span>
-                </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Conclude Round 1 now and transition to evaluation and shortlisting?')) {
+                          executeControl('END_ROUND');
+                        }
+                      }}
+                      disabled={!!loadingAction}
+                      className="w-full py-2 px-3 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-800 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-current" />
+                      <span>End Round 1</span>
+                    </button>
+                  </div>
+                )}
 
-                <button
-                  onClick={() => executeControl('START_ROUND_2')}
-                  disabled={!!loadingAction}
-                  className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-md shadow-sky-500/20"
-                >
-                  <FastForward className="w-3.5 h-3.5" />
-                  <span>Start Round 2: Bug Hunt Arena</span>
-                </button>
-              </>
-            )}
-
-            {/* When in Round 2 Evaluation */}
-            {compState?.status === 'ROUND_2_EVALUATION' && (
-              <>
-                <button
-                  onClick={() => handleOpenShortlisting(3)}
-                  className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-md shadow-violet-600/20"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Shortlist Finalists (5-8 Teams)</span>
-                </button>
-
-                <button
-                  onClick={() => executeControl('START_ROUND_3')}
-                  disabled={!!loadingAction}
-                  className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-md shadow-sky-500/20"
-                >
-                  <FastForward className="w-3.5 h-3.5" />
-                  <span>Start Round 3: Final Boss Coding</span>
-                </button>
-              </>
-            )}
-
-            {/* When in Final Evaluation */}
-            {compState?.status === 'FINAL_EVALUATION' && (
-              <button
-                onClick={() => {
-                  if (window.confirm('Officially conclude competition and finalize results?')) {
-                    executeControl('COMPLETE_COMPETITION');
-                  }
-                }}
-                disabled={!!loadingAction}
-                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-colors flex items-center gap-2"
-              >
-                <Award className="w-4 h-4" />
-                <span>Complete Competition & Publish</span>
-              </button>
-            )}
-
-            {/* When Completed */}
-            {compState?.status === 'COMPLETED' && (
-              <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold font-mono">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>All Competition Rounds Completed</span>
+                {isR1Completed && (
+                  <button
+                    onClick={() => handleOpenShortlisting(2)}
+                    className="w-full py-2.5 px-3 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>{r2ShortlistCount > 0 ? 'Edit Round 2 Shortlist' : 'Shortlist Teams for Round 2'}</span>
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right 1 Col: Live Metrics */}
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400">
-            Participation Matrix
-          </h3>
-
-          <div className="space-y-3 text-xs">
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-              <span className="text-slate-400">Total Registered</span>
-              <span className="font-mono font-bold text-white">{compState?.totalTeamsCount} Teams</span>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-              <span className="text-slate-400">Current Round Eligible</span>
-              <span className="font-mono font-bold text-emerald-400">{compState?.eligibleTeamsCount} Teams</span>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-              <span className="text-slate-400">Active / In Progress</span>
-              <span className="font-mono font-bold text-sky-400">{compState?.participatingTeamsCount} Teams</span>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-              <span className="text-slate-400">Submissions Finished</span>
-              <span className="font-mono font-bold text-amber-400">{compState?.completedTeamsCount} Teams</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Activity Log Audit Stream */}
-      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-2">
-            <span>Server Audit Trail & Transition Log</span>
-          </h3>
-          <button
-            onClick={() => refetchLogs()}
-            className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="divide-y divide-slate-800/80 max-h-72 overflow-y-auto">
-          {activityLogs && activityLogs.length > 0 ? (
-            activityLogs.map((log) => (
-              <div key={log.id} className="py-2.5 text-xs flex items-center justify-between gap-4 font-mono">
-                <div className="flex items-center gap-2 text-slate-300">
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-[10px]">
-                    {log.action}
+            {/* CARD 2: Round 2 — Bug Hunt Arena */}
+            <div
+              className={`p-6 rounded-2xl border transition-all flex flex-col justify-between ${
+                compState?.status === 'ROUND_2_ACTIVE'
+                  ? 'bg-white border-emerald-400 shadow-md ring-2 ring-emerald-500/10'
+                  : 'bg-white border-slate-200/90 shadow-2xs'
+              }`}
+            >
+              <div className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="w-10 h-10 rounded-xl bg-teal-100 border border-teal-200 flex items-center justify-center text-teal-800 font-bold">
+                    R2
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
+                      compState?.status === 'ROUND_2_ACTIVE'
+                        ? compState?.isPaused
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : isR2Completed
+                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                        : 'bg-slate-50 text-slate-400 border border-slate-200'
+                    }`}
+                  >
+                    {compState?.status === 'ROUND_2_ACTIVE'
+                      ? compState?.isPaused
+                        ? 'PAUSED'
+                        : 'ACTIVE'
+                      : isR2Completed
+                      ? 'COMPLETED'
+                      : 'NOT STARTED'}
                   </span>
-                  <span>{log.description}</span>
                 </div>
-                <span className="text-[10px] text-slate-500 shrink-0">
-                  {new Date(log.createdAt).toLocaleTimeString()}
-                </span>
-              </div>
-            ))
-          ) : (
-            <div className="py-8 text-center text-xs text-slate-500 font-mono">
-              No competition events recorded yet.
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Modal: Progressive Shortlisting Drawer */}
+                <div>
+                  <h3 className="text-base font-bold text-emerald-950">Round 2: Bug Hunt Arena</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Diagnose logic flaws, edge cases & test suites in relay IDE.
+                  </p>
+                  <div className="flex items-center gap-3 mt-2 text-xs font-mono text-emerald-800">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> 40 Minutes
+                    </span>
+                    <span>•</span>
+                    <span className="font-bold">100 Marks</span>
+                  </div>
+                </div>
+
+                {/* Progression Lock Notification */}
+                {!isR1Completed ? (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>Locked — Complete Round 1 first.</span>
+                  </div>
+                ) : !isR2ShortlistFinalized ? (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Action Required — Finalize Round 1 shortlist to unlock.</span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
+                    <span className="font-medium">Qualified Teams:</span>
+                    <span className="font-mono font-bold text-emerald-800">{r2ShortlistCount} Teams</span>
+                  </div>
+                )}
+
+                {/* Round 2 Stats */}
+                <div className="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100 font-mono">
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-[10px] text-slate-500 block">Eligible</span>
+                    <span className="font-bold text-slate-800">{r2ShortlistCount}</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-[10px] text-slate-500 block">Completed</span>
+                    <span className="font-bold text-slate-800">{r2Summary?.completedCount ?? 0}</span>
+                  </div>
+                </div>
+
+                {isR2Completed && (
+                  <div className="p-2.5 rounded-xl bg-violet-50/70 border border-violet-200 text-xs text-violet-900 flex items-center justify-between">
+                    <span className="font-medium">Shortlist for R3:</span>
+                    <span className="font-mono font-bold text-violet-800">
+                      {r3ShortlistCount > 0 ? `${r3ShortlistCount} Finalists Finalized` : 'Pending Selection'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2 Actions */}
+              <div className="pt-6 border-t border-slate-100 space-y-2">
+                {compState?.status === 'ROUND_1_EVALUATION' && (
+                  <button
+                    onClick={() => executeControl('START_ROUND_2')}
+                    disabled={!isR2ShortlistFinalized || !!loadingAction}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Start Round 2: Bug Hunt</span>
+                  </button>
+                )}
+
+                {compState?.status === 'ROUND_2_ACTIVE' && (
+                  <div className="space-y-2">
+                    {compState.isPaused ? (
+                      <button
+                        onClick={() => executeControl('RESUME_ROUND')}
+                        disabled={!!loadingAction}
+                        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Resume Timer</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => executeControl('PAUSE_ROUND')}
+                        disabled={!!loadingAction}
+                        className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                      >
+                        <Pause className="w-3.5 h-3.5 fill-current" />
+                        <span>Pause Round 2</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Conclude Round 2 now and transition to finalist shortlisting?')) {
+                          executeControl('END_ROUND');
+                        }
+                      }}
+                      disabled={!!loadingAction}
+                      className="w-full py-2 px-3 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-800 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-current" />
+                      <span>End Round 2</span>
+                    </button>
+                  </div>
+                )}
+
+                {isR2Completed && (
+                  <button
+                    onClick={() => handleOpenShortlisting(3)}
+                    className="w-full py-2.5 px-3 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>{r3ShortlistCount > 0 ? 'Edit Finalist Shortlist' : 'Shortlist Finalists for Round 3'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* CARD 3: Round 3 — Final Boss Coding */}
+            <div
+              className={`p-6 rounded-2xl border transition-all flex flex-col justify-between ${
+                compState?.status === 'ROUND_3_ACTIVE'
+                  ? 'bg-white border-emerald-400 shadow-md ring-2 ring-emerald-500/10'
+                  : 'bg-white border-slate-200/90 shadow-2xs'
+              }`}
+            >
+              <div className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-800 font-bold">
+                    R3
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
+                      compState?.status === 'ROUND_3_ACTIVE'
+                        ? compState?.isPaused
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : isR3Completed
+                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                        : 'bg-slate-50 text-slate-400 border border-slate-200'
+                    }`}
+                  >
+                    {compState?.status === 'ROUND_3_ACTIVE'
+                      ? compState?.isPaused
+                        ? 'PAUSED'
+                        : 'ACTIVE'
+                      : isR3Completed
+                      ? 'COMPLETED'
+                      : 'NOT STARTED'}
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-base font-bold text-emerald-950">Round 3: Final Boss</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    3 progressive algorithmic cases: 20 + 25 + 45 (+10 code quality).
+                  </p>
+                  <div className="flex items-center gap-3 mt-2 text-xs font-mono text-emerald-800">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> 60 Minutes
+                    </span>
+                    <span>•</span>
+                    <span className="font-bold">100 Marks</span>
+                  </div>
+                </div>
+
+                {/* Progression Lock Notification */}
+                {!isR2Completed ? (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>Locked — Complete Round 2 first.</span>
+                  </div>
+                ) : !isR3ShortlistFinalized ? (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Action Required — Finalize Round 2 shortlist to unlock.</span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
+                    <span className="font-medium">Finalist Teams:</span>
+                    <span className="font-mono font-bold text-emerald-800">{r3ShortlistCount} Teams</span>
+                  </div>
+                )}
+
+                {/* Round 3 Stats */}
+                <div className="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100 font-mono">
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-[10px] text-slate-500 block">Finalists</span>
+                    <span className="font-bold text-slate-800">{r3ShortlistCount}</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-[10px] text-slate-500 block">Completed</span>
+                    <span className="font-bold text-slate-800">{r3Summary?.completedCount ?? 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3 Actions */}
+              <div className="pt-6 border-t border-slate-100 space-y-2">
+                {compState?.status === 'ROUND_2_EVALUATION' && (
+                  <button
+                    onClick={() => executeControl('START_ROUND_3')}
+                    disabled={!isR3ShortlistFinalized || !!loadingAction}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Start Round 3: Final Boss</span>
+                  </button>
+                )}
+
+                {compState?.status === 'ROUND_3_ACTIVE' && (
+                  <div className="space-y-2">
+                    {compState.isPaused ? (
+                      <button
+                        onClick={() => executeControl('RESUME_ROUND')}
+                        disabled={!!loadingAction}
+                        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Resume Timer</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => executeControl('PAUSE_ROUND')}
+                        disabled={!!loadingAction}
+                        className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                      >
+                        <Pause className="w-3.5 h-3.5 fill-current" />
+                        <span>Pause Round 3</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Conclude Round 3 now and transition to Final Evaluation?')) {
+                          executeControl('END_ROUND');
+                        }
+                      }}
+                      disabled={!!loadingAction}
+                      className="w-full py-2 px-3 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-800 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-current" />
+                      <span>End Round 3</span>
+                    </button>
+                  </div>
+                )}
+
+                {compState?.status === 'FINAL_EVALUATION' && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Officially conclude the competition and publish winner placements?')) {
+                        executeControl('COMPLETE_COMPETITION');
+                      }
+                    }}
+                    disabled={!!loadingAction}
+                    className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Award className="w-4 h-4" />
+                    <span>Complete Competition & Publish</span>
+                  </button>
+                )}
+
+                {compState?.status === 'COMPLETED' && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center font-bold text-xs text-emerald-800 flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Tournament Successfully Concluded</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION D: Server Audit Trail & Transition Log */}
+        <div className="p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-mono uppercase tracking-wider text-emerald-950 font-bold">
+                Server Audit Trail & Transition Log
+              </h3>
+              <p className="text-xs text-slate-500">Live sequential audit trail of administrative state transitions.</p>
+            </div>
+            <button
+              onClick={() => refetchLogs()}
+              className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition"
+              title="Refresh logs"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+            {activityLogs && activityLogs.length > 0 ? (
+              activityLogs.map((log) => (
+                <div key={log.id} className="py-2.5 text-xs flex items-center justify-between gap-4 font-mono">
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                      {log.action}
+                    </span>
+                    <span className="font-sans text-xs text-slate-800">{log.description}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 shrink-0">
+                    {new Date(log.createdAt).toLocaleTimeString()}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="py-8 text-center text-xs text-slate-400 font-mono">
+                No competition events recorded yet.
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* SECTION C: Administrator-Controlled Team Shortlisting Interface Modal */}
       {showShortlistModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-200">
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Users className="w-4 h-4 text-violet-400" />
-                  <span>Shortlist Teams for Round {targetRound}</span>
+                <h3 className="text-lg font-bold text-emerald-950 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-600" />
+                  <span>
+                    Shortlist Teams for Round {targetRound}: {targetRound === 2 ? 'Bug Hunt Arena' : 'Final Boss Coding'}
+                  </span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Review scores from previous round and select teams qualified to participate.
+                <p className="text-xs text-slate-500 mt-1">
+                  <strong>Administrator Selection Mode:</strong> Check the boxes next to the teams you wish to qualify. Unselected teams will be marked ineligible for Round {targetRound}.
                 </p>
               </div>
               <button
                 onClick={() => setShowShortlistModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
               >
                 ✕
               </button>
             </div>
 
-            {/* Quick Auto-select Buttons */}
-            <div className="py-3 flex items-center gap-2 border-b border-slate-800">
-              <span className="text-xs text-slate-400 font-medium">Quick Selection:</span>
-              {targetRound === 2 ? (
-                <button
-                  onClick={() => handleAutoSelectTop(0.5)}
-                  className="px-2.5 py-1 bg-violet-600/30 hover:bg-violet-600/50 text-violet-300 border border-violet-500/40 rounded text-xs font-mono font-semibold"
-                >
-                  Select Top 50%
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleAutoSelectTop(6)}
-                  className="px-2.5 py-1 bg-violet-600/30 hover:bg-violet-600/50 text-violet-300 border border-violet-500/40 rounded text-xs font-mono font-semibold"
-                >
-                  Select Top 6 Finalists
-                </button>
-              )}
-              <span className="text-xs font-mono text-emerald-400 ml-auto">
-                {selectedTeamIds.size} / {candidateTeams.length} Selected
-              </span>
+            {/* Filter & Search Toolbar */}
+            <div className="py-3.5 space-y-3 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Search by team or code..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white transition"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <select
+                    value={statusFilter}
+                    onChange={(e: any) => setStatusFilter(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 bg-white"
+                  >
+                    <option value="ALL">All Submissions</option>
+                    <option value="SUBMITTED">Submitted</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="NOT_STARTED">Not Started</option>
+                  </select>
+
+                  <select
+                    value={sortBy}
+                    onChange={(e: any) => setSortBy(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 bg-white"
+                  >
+                    <option value="RANK">Sort: Highest Score</option>
+                    <option value="SCORE_ASC">Sort: Lowest Score</option>
+                    <option value="NAME_ASC">Sort: Team Name (A-Z)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Quick Select Buttons & Counters */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-600">Quick Helpers:</span>
+                  <button
+                    onClick={() => handleSelectAllFiltered(filteredCandidates.map((t) => t.teamId))}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-xs transition"
+                  >
+                    Select All Filtered
+                  </button>
+                  <button
+                    onClick={() => handleDeselectAllFiltered(filteredCandidates.map((t) => t.teamId))}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-xs transition"
+                  >
+                    Deselect All
+                  </button>
+                  {targetRound === 2 ? (
+                    <button
+                      onClick={() => handleAutoSelectTop(0.5)}
+                      className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition"
+                    >
+                      Top 50% by Score
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleAutoSelectTop(6)}
+                      className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition"
+                    >
+                      Top 6 Finalists
+                    </button>
+                  )}
+                </div>
+
+                <div className="font-mono font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
+                  {selectedTeamIds.size} of {candidateTeams.length} Teams Selected
+                </div>
+              </div>
             </div>
 
-            {/* Candidates Table */}
+            {/* Candidate Teams Table */}
             <div className="flex-1 overflow-y-auto py-2">
               {shortlistLoading ? (
-                <div className="py-12 text-center text-xs text-slate-500">
-                  Loading candidates...
+                <div className="py-16 text-center text-xs text-slate-400">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
+                  <span>Loading candidate teams...</span>
+                </div>
+              ) : filteredCandidates.length === 0 ? (
+                <div className="py-16 text-center text-xs text-slate-400">
+                  No candidate teams matched the filter.
                 </div>
               ) : (
-                <table className="w-full text-left text-xs">
-                  <thead className="text-[10px] uppercase font-mono text-slate-400 border-b border-slate-800 sticky top-0 bg-slate-900">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="text-[10px] uppercase font-mono text-slate-500 border-b border-slate-200 sticky top-0 bg-white shadow-2xs">
                     <tr>
-                      <th className="py-2 px-3">Select</th>
-                      <th className="py-2 px-3">Rank & Code</th>
-                      <th className="py-2 px-3">Team Name</th>
-                      <th className="py-2 px-3 text-right">Score</th>
+                      <th className="py-2.5 px-3">Qualify</th>
+                      <th className="py-2.5 px-3">Rank & Code</th>
+                      <th className="py-2.5 px-3">Team & Institution</th>
+                      <th className="py-2.5 px-3">Contestants</th>
+                      <th className="py-2.5 px-3">Submission</th>
+                      <th className="py-2.5 px-3 text-right">Score</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {candidateTeams.map((team) => {
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredCandidates.map((team) => {
                       const isSelected = selectedTeamIds.has(team.teamId);
                       return (
                         <tr
@@ -540,26 +1024,42 @@ export const CompetitionControlPage: React.FC = () => {
                             else next.add(team.teamId);
                             setSelectedTeamIds(next);
                           }}
-                          className={`cursor-pointer transition-colors ${
-                            isSelected ? 'bg-violet-950/20' : 'hover:bg-slate-800/30'
+                          className={`cursor-pointer transition ${
+                            isSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : 'hover:bg-slate-50'
                           }`}
                         >
-                          <td className="py-2 px-3">
+                          <td className="py-3 px-3">
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => {}} // handled by row click
-                              className="rounded border-slate-700 text-violet-600"
+                              className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                             />
                           </td>
-                          <td className="py-2 px-3 font-mono font-bold text-sky-400">
+                          <td className="py-3 px-3 font-mono font-bold text-emerald-900">
                             #{team.rank} {team.teamCode}
                           </td>
-                          <td className="py-2 px-3">
-                            <div className="font-semibold text-white">{team.teamName}</div>
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-900">{team.teamName}</div>
                             <div className="text-[10px] text-slate-500">{team.institution || '—'}</div>
                           </td>
-                          <td className="py-2 px-3 text-right font-mono font-bold text-amber-400">
+                          <td className="py-3 px-3 text-[11px] text-slate-600">
+                            {team.participants.map((p) => p.fullName).join(', ') || '—'}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                                team.participationStatus === 'SUBMITTED'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : team.participationStatus === 'IN_PROGRESS'
+                                  ? 'bg-sky-100 text-sky-800'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {team.participationStatus}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-800 text-sm">
                             {team.score} pts
                           </td>
                         </tr>
@@ -570,20 +1070,73 @@ export const CompetitionControlPage: React.FC = () => {
               )}
             </div>
 
-            <div className="pt-4 border-t border-slate-800 flex justify-end gap-2">
+            {/* Modal Footer */}
+            <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                {selectedTeamIds.size} teams will be unlocked for Round {targetRound}.
+              </span>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowShortlistModal(false)}
+                  className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={() => setShowConfirmModal(true)}
+                  disabled={shortlistLoading || selectedTeamIds.size === 0}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Review & Finalize Shortlist ({selectedTeamIds.size})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog before Finalizing Shortlist */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-emerald-950 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              <span>Confirm Shortlist Finalization</span>
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              You are about to finalize progression for <strong>Round {targetRound}</strong>:
+            </p>
+
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs space-y-1">
+              <div className="flex justify-between font-bold text-emerald-950">
+                <span>Qualifying Teams:</span>
+                <span className="font-mono">{selectedTeamIds.size}</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Eliminated / Ineligible:</span>
+                <span className="font-mono">{candidateTeams.length - selectedTeamIds.size}</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              This action will mark the selected teams as <strong>ELIGIBLE</strong> for Round {targetRound} and unlock the start orchestrator. You can re-open this modal to adjust selections if needed.
+            </p>
+
+            <div className="pt-2 flex justify-end gap-2">
               <button
-                onClick={() => setShowShortlistModal(false)}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg"
+                onClick={() => setShowConfirmModal(false)}
+                className="px-3.5 py-1.5 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50"
               >
-                Cancel
+                Back
               </button>
               <button
                 onClick={handleCommitShortlist}
-                disabled={shortlistLoading || selectedTeamIds.size === 0}
-                className="px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Confirm & Advance {selectedTeamIds.size} Teams</span>
+                Confirm & Unlock Round {targetRound}
               </button>
             </div>
           </div>
@@ -592,45 +1145,47 @@ export const CompetitionControlPage: React.FC = () => {
 
       {/* Modal: State Reset */}
       {showResetModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <RotateCcw className="w-4 h-4 text-rose-400" />
-              <span>Reset Competition State</span>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-emerald-950 flex items-center gap-2">
+              <RotateCcw className="w-4 h-4 text-rose-600" />
+              <span>Reset Tournament State Machine</span>
             </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Resets the competition state machine back to <strong>STANDBY</strong>. Select what should be cleared:
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Resets competition progression back to <strong>STANDBY</strong>. Select reset scope:
             </p>
 
             <div className="space-y-2 text-xs">
-              <label className="flex items-center gap-2.5 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100/70">
                 <input
                   type="radio"
                   name="resetType"
                   value="DEMO_ONLY"
                   checked={resetType === 'DEMO_ONLY'}
                   onChange={() => setResetType('DEMO_ONLY')}
+                  className="text-emerald-600"
                 />
                 <div>
-                  <span className="font-semibold text-white block">Reset Demo Teams Only</span>
+                  <span className="font-bold text-slate-800 block">Reset Demo Teams Only</span>
                   <span className="text-slate-500 text-[11px]">
                     Deletes simulated demo teams while preserving genuine registered teams.
                   </span>
                 </div>
               </label>
 
-              <label className="flex items-center gap-2.5 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100/70">
                 <input
                   type="radio"
                   name="resetType"
                   value="FULL_RESET"
                   checked={resetType === 'FULL_RESET'}
                   onChange={() => setResetType('FULL_RESET')}
+                  className="text-rose-600"
                 />
                 <div>
-                  <span className="font-semibold text-rose-400 block">Full Progress Reset</span>
+                  <span className="font-bold text-rose-700 block">Full Progress Reset</span>
                   <span className="text-slate-500 text-[11px]">
-                    Resets all round progress and eligibility for all teams back to STANDBY.
+                    Resets round progress and eligibility for all teams back to STANDBY.
                   </span>
                 </div>
               </label>
@@ -639,7 +1194,7 @@ export const CompetitionControlPage: React.FC = () => {
             <div className="pt-2 flex justify-end gap-2">
               <button
                 onClick={() => setShowResetModal(false)}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg"
+                className="px-3.5 py-1.5 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -648,7 +1203,7 @@ export const CompetitionControlPage: React.FC = () => {
                   setShowResetModal(false);
                   executeControl('RESET_COMPETITION', { resetType });
                 }}
-                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg"
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-xs"
               >
                 Confirm Reset
               </button>

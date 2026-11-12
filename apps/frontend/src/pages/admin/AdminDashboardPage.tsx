@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AdminNav } from '../../components/AdminNav';
 import { adminService } from '../../services/admin.service';
 import {
   useCompetitionState,
@@ -52,10 +51,7 @@ export const AdminDashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8faf9] pb-12">
-      {/* 8-Section Admin Navigation Bar */}
-      <AdminNav />
-
+    <div className="min-h-screen bg-[#f8faf9] pb-12 pt-4">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Title & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
