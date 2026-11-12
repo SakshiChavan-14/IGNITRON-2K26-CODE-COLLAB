@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { AdminNav } from '../../components/AdminNav';
 import { questionAndArenaService } from '../../services/question-and-arena.service';
 import { QuestionDto, QuestionType, CreateQuestionDto } from '@ignitron/shared';
 import {
@@ -172,8 +171,6 @@ export const QuestionManagementPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8faf9] pb-16">
-      <AdminNav />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pt-4">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
@@ -264,9 +261,24 @@ export const QuestionManagementPage: React.FC = () => {
             }`}
           >
             <Clock className="w-4 h-4 text-emerald-600" />
-            <span>Round 3: Final Boss (3 Cases: 20 + 25 + 45 + 10)</span>
+            <span>Round 3: Final Boss (100 Marks: 20 + 25 + 45 + 10)</span>
           </button>
         </div>
+
+        {/* Round 3 Scoring Rubric Information Banner */}
+        {activeRound === 3 && (
+          <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-xs text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span>
+                <strong>Round 3 Tournament Rubric:</strong> Case 1 (20 pts) + Case 2 (25 pts) + Case 3 (45 pts) + Code Quality & Architecture (10 pts) = <strong>100 Total Marks</strong>.
+              </span>
+            </div>
+            <span className="font-mono font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-md border border-emerald-200 shrink-0 self-start sm:self-auto">
+              100 Max Points
+            </span>
+          </div>
+        )}
 
         {/* Content Table / List */}
         {loading ? (
@@ -296,7 +308,10 @@ export const QuestionManagementPage: React.FC = () => {
             <div className="flex items-center justify-between text-xs text-slate-500 px-1">
               <span>Showing {questions.length} questions for Round {activeRound}</span>
               <span className="font-mono font-medium">
-                Total Marks: {questions.reduce((sum, q) => sum + q.marks, 0)}
+                Total Marks:{' '}
+                {activeRound === 3
+                  ? `${questions.reduce((sum, q) => sum + q.marks, 0) + 10} (90 Cases + 10 Rubric/Quality)`
+                  : questions.reduce((sum, q) => sum + q.marks, 0)}
               </span>
             </div>
 

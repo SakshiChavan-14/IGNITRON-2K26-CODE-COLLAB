@@ -124,6 +124,10 @@ export const App: React.FC = () => {
                 }
               />
               <Route
+                path="admin/control"
+                element={<Navigate to="/admin/competition" replace />}
+              />
+              <Route
                 path="admin/teams"
                 element={
                   <ProtectedRoute requiredType="ADMIN">
