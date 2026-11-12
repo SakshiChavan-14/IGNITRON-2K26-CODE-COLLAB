@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/auth.service';
 import { TeamParticipantOption } from '@ignitron/shared';
+import { GoldenSnowfall } from '../components/GoldenSnowfall';
 import {
   Users,
   Lock,
@@ -129,8 +130,30 @@ export const TeamLoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white border border-slate-200/90 rounded-2xl shadow-xl shadow-emerald-950/5 p-6 sm:p-8">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-[#010905] overflow-hidden flex items-center justify-center p-4 selection:bg-emerald-500/30 selection:text-emerald-200">
+      {/* Dynamic Golden Snowfall Background */}
+      <GoldenSnowfall />
+
+      {/* Atmospheric Ambient Lighting Gradients */}
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+        <div
+          className="absolute -top-24 left-1/2 -translate-x-1/2 w-[600px] h-[300px] opacity-30 blur-3xl"
+          style={{
+            background:
+              'radial-gradient(ellipse at 50% 0%, rgba(245, 158, 11, 0.45) 0%, transparent 80%)',
+          }}
+        />
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[450px] opacity-35 blur-3xl"
+          style={{
+            background:
+              'radial-gradient(ellipse at 50% 50%, rgba(16, 185, 129, 0.4) 0%, transparent 75%)',
+          }}
+        />
+      </div>
+
+      {/* Crisp White Form Card */}
+      <div className="relative z-10 w-full max-w-md bg-white border border-slate-200/90 rounded-2xl shadow-2xl p-6 sm:p-8">
         <div className="flex flex-col items-center text-center mb-6">
           <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mb-3 shadow-xs">
             <Users className="w-6 h-6" />

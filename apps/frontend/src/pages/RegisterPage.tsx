@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 import { RegisterTeamResponse } from '@ignitron/shared';
+import { GoldenSnowfall } from '../components/GoldenSnowfall';
 import {
   Users,
   GraduationCap,
@@ -118,8 +119,30 @@ export const RegisterPage: React.FC = () => {
 
   if (registeredData) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
-        <div className="w-full max-w-lg bg-white border border-emerald-200/80 rounded-2xl shadow-xl shadow-emerald-950/5 p-8 text-center animate-fade-in">
+      <div className="relative min-h-[calc(100vh-4rem)] bg-[#010905] overflow-hidden flex items-center justify-center p-4">
+        {/* Dynamic Golden Snowfall Background */}
+        <GoldenSnowfall />
+
+        {/* Ambient Lighting Gradients */}
+        <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+          <div
+            className="absolute -top-24 left-1/2 -translate-x-1/2 w-[600px] h-[300px] opacity-30 blur-3xl"
+            style={{
+              background:
+                'radial-gradient(ellipse at 50% 0%, rgba(245, 158, 11, 0.45) 0%, transparent 80%)',
+            }}
+          />
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] opacity-40 blur-3xl"
+            style={{
+              background:
+                'radial-gradient(ellipse at 50% 50%, rgba(16, 185, 129, 0.4) 0%, transparent 75%)',
+            }}
+          />
+        </div>
+
+        {/* Crisp White Success Card */}
+        <div className="relative z-10 w-full max-w-lg bg-white border border-slate-200/90 rounded-2xl shadow-2xl p-8 text-center animate-fade-in">
           <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mx-auto mb-5 shadow-sm">
             <CheckCircle2 className="w-9 h-9" />
           </div>
@@ -178,20 +201,42 @@ export const RegisterPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      {/* Page Header */}
-      <div className="text-center max-w-2xl mx-auto">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-100/70 text-emerald-800 border border-emerald-200/80 mb-3">
-          <Users className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Official Team Entry</span>
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-emerald-950">
-          Register Your Team
-        </h1>
-        <p className="text-sm text-slate-600 mt-2">
-          IGNITRON 2K26 Code Relay requires exactly two contestants per team. Fill in your team and participant details below.
-        </p>
+    <div className="relative min-h-[calc(100vh-4rem)] bg-[#010905] overflow-hidden py-10 selection:bg-emerald-500/30 selection:text-emerald-200">
+      {/* Dynamic Golden Snowfall Background */}
+      <GoldenSnowfall />
+
+      {/* Atmospheric Ambient Glows */}
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+        <div
+          className="absolute -top-24 left-1/2 -translate-x-1/2 w-[600px] h-[300px] opacity-30 blur-3xl"
+          style={{
+            background:
+              'radial-gradient(ellipse at 50% 0%, rgba(245, 158, 11, 0.45) 0%, transparent 80%)',
+          }}
+        />
+        <div
+          className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[500px] opacity-35 blur-3xl"
+          style={{
+            background:
+              'radial-gradient(ellipse at 50% 50%, rgba(16, 185, 129, 0.35) 0%, transparent 75%)',
+          }}
+        />
       </div>
+
+      <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        {/* Page Header */}
+        <div className="text-center max-w-2xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 mb-3 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+            <Users className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Official Team Entry</span>
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white drop-shadow-[0_0_25px_rgba(16,185,129,0.7)]">
+            Register Your Team
+          </h1>
+          <p className="text-sm text-emerald-100/80 mt-2">
+            IGNITRON 2K26 Code Relay requires exactly two contestants per team. Fill in your team and participant details below.
+          </p>
+        </div>
 
       {error && (
         <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-3 shadow-sm">
@@ -441,6 +486,7 @@ export const RegisterPage: React.FC = () => {
           </button>
         </div>
       </form>
+    </div>
     </div>
   );
 };
