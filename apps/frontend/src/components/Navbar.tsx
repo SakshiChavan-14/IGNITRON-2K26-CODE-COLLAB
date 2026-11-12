@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { ADMIN_NAV_ITEMS } from './AdminNav';
 import {
   ShieldAlert,
   LogOut,
@@ -168,7 +169,90 @@ export const Navbar: React.FC = () => {
   }
 
   // ---------------------------------------------------------------------------
-  // 2. Default App Navbar (Light Competition Dashboard Theme)
+  // 2. Admin Header (Consolidated Single Header for all Admin Routes)
+  // ---------------------------------------------------------------------------
+  if (user?.type === 'ADMIN') {
+    return (
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="h-16 flex items-center justify-between gap-3">
+            {/* Left: Brand + Admin Badge */}
+            <Link to="/admin/dashboard" className="flex items-center gap-2.5 shrink-0 group">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-md shadow-emerald-600/20 group-hover:scale-105 transition-transform">
+                <Terminal className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col">
+                <div className="text-sm sm:text-base font-extrabold tracking-tight text-emerald-950 flex items-center gap-1.5">
+                  <span>IGNITRON</span>
+                  <span className="text-emerald-600">2K26</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-mono uppercase tracking-widest text-emerald-800 font-semibold">
+                    Code Relay
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    Admin
+                  </span>
+                </div>
+              </div>
+            </Link>
+
+            {/* Center: Single Responsive Nav with 8 items */}
+            <nav className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-none max-w-2xl lg:max-w-3xl">
+              {ADMIN_NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isItemActive =
+                  location.pathname === item.path ||
+                  (item.path === '/admin/competition' && location.pathname === '/admin/control');
+
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
+                      isItemActive
+                        ? 'bg-emerald-50 text-emerald-900 border border-emerald-300/80 shadow-2xs'
+                        : 'text-slate-600 hover:text-emerald-950 hover:bg-slate-50 border border-transparent'
+                    }`}
+                  >
+                    <Icon
+                      className={`w-3.5 h-3.5 shrink-0 ${
+                        isItemActive ? 'text-emerald-700' : 'text-emerald-600'
+                      }`}
+                    />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* Right: Admin User + Role Badge + Logout */}
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="hidden sm:flex flex-col text-right">
+                <span className="text-xs font-bold text-slate-800 truncate max-w-[130px]">
+                  {user.fullName}
+                </span>
+                <span className="text-[10px] font-mono text-amber-700 font-bold uppercase tracking-wider">
+                  [{user.role}]
+                </span>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                title="Log out"
+                className="p-2 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. Default App Navbar (Team & Public Light Competition Theme)
   // ---------------------------------------------------------------------------
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
@@ -192,84 +276,38 @@ export const Navbar: React.FC = () => {
         {/* Navigation / Role Context */}
         {user ? (
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Team or Admin Role Badge */}
-            {user.type === 'TEAM' ? (
-              <div className="hidden sm:flex flex-col text-right">
-                <span className="text-xs font-bold text-slate-800">{user.teamName}</span>
-                <span className="text-[11px] font-mono text-emerald-700 flex items-center justify-end gap-1">
-                  <UserCheck className="w-3 h-3 text-emerald-600" />
-                  <span>{user.activeParticipant.fullName}</span>
-                  <span className="text-slate-400 font-bold font-mono">({user.teamCode})</span>
-                </span>
-              </div>
-            ) : (
-              <div className="hidden sm:flex flex-col text-right">
-                <span className="text-xs font-bold text-slate-800">{user.fullName}</span>
-                <span className="text-[11px] font-mono text-amber-700 font-semibold uppercase">
-                  [{user.role}]
-                </span>
-              </div>
-            )}
+            {/* Team Role Badge */}
+            <div className="hidden sm:flex flex-col text-right">
+              <span className="text-xs font-bold text-slate-800">{user.teamName}</span>
+              <span className="text-[11px] font-mono text-emerald-700 flex items-center justify-end gap-1">
+                <UserCheck className="w-3 h-3 text-emerald-600" />
+                <span>{user.activeParticipant.fullName}</span>
+                <span className="text-slate-400 font-bold font-mono">({user.teamCode})</span>
+              </span>
+            </div>
 
             {/* Quick Links */}
             <div className="flex items-center gap-2">
-              {user.type === 'TEAM' ? (
-                <>
-                  <Link
-                    to="/team/dashboard"
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      isActive('/team/dashboard')
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    Dashboard
-                  </Link>
-                  <Link
-                    to="/team/workspace"
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      isActive('/team/workspace')
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    Workspace
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <Link
-                    to="/admin/dashboard"
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      isActive('/admin/dashboard')
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    Dashboard
-                  </Link>
-                  <Link
-                    to="/admin/teams"
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      isActive('/admin/teams')
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    Teams
-                  </Link>
-                  <Link
-                    to="/admin/competition"
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      isActive('/admin/competition')
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    Rounds
-                  </Link>
-                </>
-              )}
+              <Link
+                to="/team/dashboard"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  isActive('/team/dashboard')
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                Dashboard
+              </Link>
+              <Link
+                to="/team/workspace"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  isActive('/team/workspace')
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                Workspace
+              </Link>
 
               <button
                 onClick={handleLogout}
