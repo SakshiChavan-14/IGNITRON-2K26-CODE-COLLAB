@@ -258,11 +258,9 @@ export class EvaluationService {
             }
           }
 
+          // Case 1 (20) + Case 2 (25) + Case 3 Combined (45 case + 10 code quality = 55) = 100 max
           finalRoundScore = Array.from(caseScores.values()).reduce((a, b) => a + b, 0);
-          if (dto.criteriaScores?.codeQuality) {
-            finalRoundScore += dto.criteriaScores.codeQuality;
-          }
-          finalRoundScore = Math.min(100, finalRoundScore);
+          finalRoundScore = Math.min(100, Math.max(0, finalRoundScore));
 
           const prevBreakdown = (progress.scoreBreakdown as Record<string, any>) || {};
           const cNum = submission.question?.caseNumber || 1;

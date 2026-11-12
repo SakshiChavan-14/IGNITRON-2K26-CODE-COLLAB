@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { AdminNav } from '../../components/AdminNav';
 import { questionAndArenaService } from '../../services/question-and-arena.service';
 import {
   AdminSubmissionListItem,
@@ -88,7 +87,7 @@ export const SubmissionsPage: React.FC = () => {
           setR2EdgeCases(detail.criteriaScores.edgeCases ?? 20);
           setR2CodeQuality(detail.criteriaScores.codeQuality ?? 10);
         } else {
-          setR3CaseScore(detail.score ?? 20);
+          setR3CaseScore(detail.criteriaScores.caseScore ?? (detail.caseNumber === 3 ? (detail.score ? detail.score - (detail.criteriaScores.codeQuality ?? 10) : 45) : (detail.score ?? 20)));
           setR3CodeQuality(detail.criteriaScores.codeQuality ?? 10);
         }
       } else {
@@ -131,11 +130,19 @@ export const SubmissionsPage: React.FC = () => {
           codeQuality: Number(r2CodeQuality),
         };
       } else {
-        total = Number(r3CaseScore) + Number(r3CodeQuality);
-        criteriaScores = {
-          caseScore: Number(r3CaseScore),
-          codeQuality: Number(r3CodeQuality),
-        };
+        // Round 3
+        if (selectedSubDetail.caseNumber === 3) {
+          total = Number(r3CaseScore) + Number(r3CodeQuality);
+          criteriaScores = {
+            caseScore: Number(r3CaseScore),
+            codeQuality: Number(r3CodeQuality),
+          };
+        } else {
+          total = Number(r3CaseScore);
+          criteriaScores = {
+            caseScore: Number(r3CaseScore),
+          };
+        }
       }
 
       const dto: GradeSubmissionDto = {
@@ -187,8 +194,6 @@ export const SubmissionsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8faf9] pb-16">
-      <AdminNav />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pt-4">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
@@ -557,25 +562,33 @@ export const SubmissionsPage: React.FC = () => {
                           />
                         </div>
 
-                        <div>
-                          <div className="flex justify-between font-bold text-slate-700 mb-1">
-                            <span>Relay Code Quality & Efficiency</span>
-                            <span className="font-mono text-emerald-800">{r3CodeQuality} / 10</span>
+                        {selectedSubDetail.caseNumber === 3 && (
+                          <div>
+                            <div className="flex justify-between font-bold text-slate-700 mb-1">
+                              <span>Relay Code Quality & Efficiency (Rubric)</span>
+                              <span className="font-mono text-emerald-800">{r3CodeQuality} / 10</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={0}
+                              max={10}
+                              value={r3CodeQuality}
+                              onChange={(e) => setR3CodeQuality(Number(e.target.value))}
+                              className="w-full accent-emerald-600"
+                            />
                           </div>
-                          <input
-                            type="range"
-                            min={0}
-                            max={10}
-                            value={r3CodeQuality}
-                            onChange={(e) => setR3CodeQuality(Number(e.target.value))}
-                            className="w-full accent-emerald-600"
-                          />
-                        </div>
+                        )}
 
                         <div className="pt-2 border-t border-emerald-200 flex justify-between items-center text-sm font-extrabold text-emerald-950">
-                          <span>Case Total Marks:</span>
+                          <span>
+                            {selectedSubDetail.caseNumber === 3
+                              ? 'Case 3 Combined Score:'
+                              : `Case ${selectedSubDetail.caseNumber || 1} Total Marks:`}
+                          </span>
                           <span className="text-base font-mono bg-emerald-600 text-white px-2 py-0.5 rounded-lg">
-                            {Number(r3CaseScore) + Number(r3CodeQuality)}
+                            {selectedSubDetail.caseNumber === 3
+                              ? `${r3CaseScore}/45 + ${r3CodeQuality}/10 = ${Number(r3CaseScore) + Number(r3CodeQuality)} / 55`
+                              : `${r3CaseScore} / ${selectedSubDetail.caseNumber === 1 ? 20 : 25}`}
                           </span>
                         </div>
                       </div>
