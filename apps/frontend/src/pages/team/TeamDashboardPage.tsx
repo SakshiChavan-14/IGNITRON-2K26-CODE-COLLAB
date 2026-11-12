@@ -447,11 +447,19 @@ export const TeamDashboardPage: React.FC = () => {
                   <div className="mt-6 pt-4 border-t border-slate-100">
                     {canLaunch ? (
                       <button
-                        onClick={() => navigate('/team/workspace')}
+                        onClick={() =>
+                          navigate(
+                            card.roundNumber === 1
+                              ? '/team/arena/mcq'
+                              : `/team/workspace?round=${card.roundNumber}`,
+                          )
+                        }
                         className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
                       >
                         <FileCode className="w-4 h-4" />
-                        <span>Launch Arena Workspace</span>
+                        <span>
+                          {card.roundNumber === 1 ? 'Enter MCQ Arena' : 'Launch Arena Workspace'}
+                        </span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     ) : (
