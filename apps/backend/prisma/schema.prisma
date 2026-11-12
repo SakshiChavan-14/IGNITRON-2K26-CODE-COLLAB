@@ -91,6 +91,12 @@ enum CompetitionStatus {
   COMPLETED
 }
 
+enum QuestionType {
+  MCQ
+  BUG_HUNT
+  CODING_CASE
+}
+
 // ------------------------------------------------------------------------------
 // A. TEAM
 // ------------------------------------------------------------------------------
@@ -113,6 +119,7 @@ model Team {
   submissions   Submission[]
   sessions      TeamSession[]
   drafts        WorkspaceDraft[]
+  mcqAnswers    TeamMcqAnswer[]
 
   @@map("teams")
 }
@@ -177,6 +184,7 @@ model CompetitionRound {
   teamProgress TeamRoundProgress[]
   submissions  Submission[]
   drafts       WorkspaceDraft[]
+  questions    Question[]
 
   @@map("competition_rounds")
 }
@@ -191,6 +199,7 @@ model TeamRoundProgress {
   eligibilityStatus   EligibilityStatus   @default(PENDING) @map("eligibility_status")
   participationStatus ParticipationStatus @default(NOT_STARTED) @map("participation_status")
   score               Decimal             @default(0.00) @db.Decimal(6, 2) @map("score")
+  scoreBreakdown      Json?               @map("score_breakdown")
   startedAt           DateTime?           @map("started_at")
   submittedAt         DateTime?           @map("submitted_at")
   evaluatedAt         DateTime?           @map("evaluated_at")
@@ -225,6 +234,8 @@ model Submission {
   score            Decimal?         @db.Decimal(6, 2) @map("score")
   judge0Token      String?          @map("judge0_token")
   isTestRun        Boolean          @default(false) @map("is_test_run")
+  questionId       String?          @map("question_id")
+  testCaseResults  Json?            @map("test_case_results")
   submittedAt      DateTime         @default(now()) @map("submitted_at")
   evaluatedAt      DateTime?        @map("evaluated_at")
   createdAt        DateTime         @default(now()) @map("created_at")
@@ -232,10 +243,12 @@ model Submission {
 
   team        Team              @relation(fields: [teamId], references: [id], onDelete: Restrict)
   round       CompetitionRound? @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  question    Question?         @relation(fields: [questionId], references: [id], onDelete: SetNull)
   evaluations Evaluation[]
 
   @@index([teamId])
   @@index([roundId])
+  @@index([questionId])
   @@index([submissionStatus])
   @@index([isTestRun])
   @@map("submissions")
@@ -245,20 +258,25 @@ model Submission {
 // G. EVALUATION
 // ------------------------------------------------------------------------------
 model Evaluation {
-  id           String    @id @default(cuid())
-  submissionId String    @map("submission_id")
-  evaluatorId  String?   @map("evaluator_id")
-  totalScore   Decimal   @db.Decimal(6, 2) @map("total_score")
-  feedback     String?   @db.Text @map("feedback")
-  evaluatedAt  DateTime  @default(now()) @map("evaluated_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id             String    @id @default(cuid())
+  submissionId   String    @map("submission_id")
+  evaluatorId    String?   @map("evaluator_id")
+  teamId         String?   @map("team_id")
+  roundNumber    Int?      @map("round_number")
+  totalScore     Decimal   @db.Decimal(6, 2) @map("total_score")
+  criteriaScores Json?     @map("criteria_scores")
+  feedback       String?   @db.Text @map("feedback")
+  evaluatedAt    DateTime  @default(now()) @map("evaluated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   submission Submission    @relation(fields: [submissionId], references: [id], onDelete: Restrict)
   evaluator  AdminAccount? @relation(fields: [evaluatorId], references: [id], onDelete: SetNull)
 
   @@index([submissionId])
   @@index([evaluatorId])
+  @@index([teamId])
+  @@index([roundNumber])
   @@map("evaluations")
 }
 
@@ -331,6 +349,7 @@ model WorkspaceDraft {
   id                        String           @id @default(cuid())
   teamId                    String           @map("team_id")
   roundId                   String           @map("round_id")
+  caseNumber                Int              @default(1) @map("case_number")
   sourceCode                String           @db.LongText @map("source_code")
   language                  String           @map("language")
   version                   Int              @default(1) @map("version")
@@ -341,7 +360,7 @@ model WorkspaceDraft {
   team                      Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
   round                     CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
 
-  @@unique([teamId, roundId])
+  @@unique([teamId, roundId, caseNumber])
   @@index([teamId])
   @@index([roundId])
   @@map("workspace_drafts")
@@ -373,5 +392,60 @@ model Announcement {
   @@index([isPublished, publishedAt])
   @@index([createdAt])
   @@map("announcements")
+}
+
+// ------------------------------------------------------------------------------
+// M. QUESTION
+// ------------------------------------------------------------------------------
+model Question {
+  id              String       @id @default(cuid())
+  roundId         String       @map("round_id")
+  type            QuestionType @default(MCQ)
+  orderNumber     Int          @map("order_number")
+  caseNumber      Int?         @map("case_number") // For Round 3 (1, 2, or 3)
+  title           String       @map("title")
+  description     String       @db.LongText @map("description")
+  starterCode     String?      @db.LongText @map("starter_code")
+  language        String?      @map("language")
+  marks           Decimal      @default(2.00) @db.Decimal(6, 2) @map("marks")
+  options         Json?        @map("options") // Array of string options: ["Option A", "Option B", ...]
+  correctOption   Int?         @map("correct_option") // 0-based index for MCQ, strictly protected
+  explanation     String?      @db.Text @map("explanation") // For MCQ or bug solution review
+  sampleTestCases Json?        @map("sample_test_cases") // [{ stdin, expectedOutput, explanation }]
+  hiddenTestCases Json?        @map("hidden_test_cases") // [{ stdin, expectedOutput, marks }] - strictly protected
+  rubric          Json?        @map("rubric") // Criteria breakdown for evaluation
+  isActive        Boolean      @default(true) @map("is_active")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  round       CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  submissions Submission[]
+  mcqAnswers  TeamMcqAnswer[]
+
+  @@unique([roundId, orderNumber])
+  @@index([roundId])
+  @@index([type])
+  @@map("questions")
+}
+
+// ------------------------------------------------------------------------------
+// N. TEAM MCQ ANSWER
+// ------------------------------------------------------------------------------
+model TeamMcqAnswer {
+  id             String    @id @default(cuid())
+  teamId         String    @map("team_id")
+  questionId     String    @map("question_id")
+  selectedOption Int?      @map("selected_option") // 0-based index, nullable if unselected
+  isFlagged      Boolean   @default(false) @map("is_flagged") // marked for review by team
+  savedAt        DateTime  @default(now()) @map("saved_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, questionId])
+  @@index([teamId])
+  @@index([questionId])
+  @@map("team_mcq_answers")
 }
 
