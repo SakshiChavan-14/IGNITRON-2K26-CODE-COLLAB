@@ -6,6 +6,8 @@ import {
   ShortlistSubmissionResult,
   TeamCompetitionStatusDto,
   CompetitionActivityLogItem,
+  LeaderboardResponseDto,
+  PublishLeaderboardDto,
 } from '@ignitron/shared';
 import { apiClient } from './api';
 
@@ -72,5 +74,26 @@ export const competitionService = {
       method: 'POST',
       body: JSON.stringify({ count }),
     });
+  },
+
+  async getLeaderboard(roundNumber?: number): Promise<LeaderboardResponseDto> {
+    const url = roundNumber
+      ? `/competition/leaderboard?roundNumber=${roundNumber}`
+      : '/competition/leaderboard';
+    const res = await apiClient<{ success: boolean; data: LeaderboardResponseDto }>(url);
+    return res.data;
+  },
+
+  async publishLeaderboard(
+    dto: PublishLeaderboardDto,
+  ): Promise<{ message: string; isPublished: boolean }> {
+    const res = await apiClient<{
+      success: boolean;
+      data: { message: string; isPublished: boolean };
+    }>('/competition/leaderboard/publish', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+    return res.data;
   },
 };
