@@ -323,14 +323,36 @@ export interface TeamCredentials {
   generatedAt: string;
 }
 
+export interface RecentRegistrationItem {
+  id: string;
+  teamCode: string;
+  teamName: string;
+  institution?: string | null;
+  createdAt: string;
+  participants: Array<{ fullName: string; email: string }>;
+}
+
+export interface RecentLoginItem {
+  id: string;
+  teamId: string;
+  teamCode: string;
+  teamName: string;
+  participantName: string;
+  loginAt: string;
+  status: SessionStatus;
+}
+
 export interface DashboardStatsDto {
   totalTeams: number;
   activeTeams: number;
   inactiveTeams: number;
   totalParticipants: number;
   teamsWithActiveSessions: number;
+  unparticipatedTeams: number;
   currentCompetitionStatus: CompetitionStatus;
   currentRoundNumber: number | null;
+  recentRegistrations?: RecentRegistrationItem[];
+  recentLogins?: RecentLoginItem[];
 }
 
 // ------------------------------------------------------------------------------
@@ -471,10 +493,31 @@ export interface TeamRoundHistoryItem {
   evaluatedAt: string | null;
 }
 
+export interface CompetitionRoundCardItem {
+  roundNumber: number;
+  name: string;
+  description: string;
+  durationMinutes: number;
+  maximumMarks: number;
+  status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'NOT_QUALIFIED';
+  teamEligibility: EligibilityStatus;
+  participationStatus: ParticipationStatus;
+  isCurrent: boolean;
+  score?: number | null;
+  isScorePublished?: boolean;
+}
+
 export interface TeamCompetitionStatusDto {
   teamId: string;
   teamCode: string;
   teamName: string;
+  institution?: string | null;
+  participants?: ParticipantSummary[];
+  activeParticipant?: {
+    id: string;
+    fullName: string;
+    email: string;
+  } | null;
   competitionStatus: CompetitionStatus;
   currentRound: {
     roundNumber: number;
@@ -491,6 +534,7 @@ export interface TeamCompetitionStatusDto {
   isPaused: boolean;
   remainingDurationSeconds: number | null;
   roundHistory: TeamRoundHistoryItem[];
+  roundCards?: CompetitionRoundCardItem[];
 }
 
 export interface CompetitionActivityLogItem {
@@ -716,5 +760,64 @@ function main() {
 
 main();`,
 };
+
+// ------------------------------------------------------------------------------
+// ANNOUNCEMENTS
+// ------------------------------------------------------------------------------
+
+export type AnnouncementPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export interface AnnouncementItem {
+  id: string;
+  title: string;
+  message: string;
+  priority: AnnouncementPriority;
+  isPublished: boolean;
+  publishedAt?: string | null;
+  authorName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAnnouncementDto {
+  title: string;
+  message: string;
+  priority?: AnnouncementPriority;
+  isPublished?: boolean;
+}
+
+export interface UpdateAnnouncementDto {
+  title?: string;
+  message?: string;
+  priority?: AnnouncementPriority;
+  isPublished?: boolean;
+}
+
+// ------------------------------------------------------------------------------
+// LEADERBOARD
+// ------------------------------------------------------------------------------
+
+export interface LeaderboardEntryDto {
+  rank: number;
+  teamId?: string;
+  teamCode?: string;
+  teamName: string;
+  institution?: string | null;
+  score: number;
+  roundScores?: Record<number, number>;
+}
+
+export interface LeaderboardResponseDto {
+  roundNumber: number | null; // null = overall tournament
+  isPublished: boolean;
+  publishedAt?: string | null;
+  entries: LeaderboardEntryDto[];
+}
+
+export interface PublishLeaderboardDto {
+  roundNumber?: number; // optional, null/omitted = all rounds
+  isPublished: boolean;
+}
+
 
 
