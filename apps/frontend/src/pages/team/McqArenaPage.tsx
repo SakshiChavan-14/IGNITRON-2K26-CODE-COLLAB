@@ -202,6 +202,17 @@ export const McqArenaPage: React.FC = () => {
             </p>
           </div>
 
+          {/* Prominent Post-Submission Waiting Notification */}
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-left text-xs text-emerald-950 flex items-start gap-3 shadow-2xs">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold block text-emerald-900">Submission Received Successfully!</span>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Your answers have been recorded. The administrators will now evaluate the round and announce shortlisted teams on the dashboard and announcements.
+              </p>
+            </div>
+          </div>
+
           {/* Score Card */}
           <div className="bg-gradient-to-b from-emerald-50 to-white rounded-2xl border border-emerald-200 p-6 space-y-3">
             <div className="text-xs font-mono font-bold text-emerald-800 uppercase tracking-wider">
@@ -335,6 +346,22 @@ export const McqArenaPage: React.FC = () => {
         </div>
       </header>
 
+      {/* Read-Only Review Mode Banner */}
+      {reviewMode && (
+        <div className="bg-emerald-900 text-white px-4 py-2.5 text-xs font-semibold flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Read-Only Review Mode — Viewing submitted answers. Scorecard and responses are locked.</span>
+          </div>
+          <button
+            onClick={() => setReviewMode(false)}
+            className="px-3 py-1 bg-white text-emerald-950 font-bold text-xs rounded-lg hover:bg-emerald-50 transition"
+          >
+            Back to Score Card
+          </button>
+        </div>
+      )}
+
       {/* Paused Banner */}
       {effectiveIsPaused && !isSubmitted && (
         <div className="bg-amber-500 text-white px-4 py-2.5 text-xs font-mono font-bold flex items-center justify-center gap-2 shadow-xs">
@@ -447,17 +474,19 @@ export const McqArenaPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <button
-                    onClick={handleToggleFlag}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition ${
-                      answers[currentQuestion.id]?.isFlagged
-                        ? 'border-amber-400 bg-amber-50 text-amber-800'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Flag className="w-3.5 h-3.5" />
-                    <span>{answers[currentQuestion.id]?.isFlagged ? 'Flagged for Review' : 'Flag Question'}</span>
-                  </button>
+                  {!reviewMode && !isSubmitted && (
+                    <button
+                      onClick={handleToggleFlag}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition ${
+                        answers[currentQuestion.id]?.isFlagged
+                          ? 'border-amber-400 bg-amber-50 text-amber-800'
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                      <span>{answers[currentQuestion.id]?.isFlagged ? 'Flagged for Review' : 'Flag Question'}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Question Title & Prompt */}
@@ -542,6 +571,14 @@ export const McqArenaPage: React.FC = () => {
                     <span>Next</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
+                ) : reviewMode || isSubmitted ? (
+                  <button
+                    onClick={() => setReviewMode(false)}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition"
+                  >
+                    <span>Back to Score Card</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
                 ) : (
                   <button
                     onClick={() => setConfirmSubmitOpen(true)}
@@ -559,8 +596,8 @@ export const McqArenaPage: React.FC = () => {
         </section>
       </main>
 
-      {/* CONFIRMATION MODAL */}
-      {confirmSubmitOpen && (
+      {/* CONFIRMATION MODAL - Strictly guarded: Never show in review mode or once submitted */}
+      {confirmSubmitOpen && !isSubmitted && !reviewMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-xl p-6 space-y-4">
             <div className="flex items-center gap-3">

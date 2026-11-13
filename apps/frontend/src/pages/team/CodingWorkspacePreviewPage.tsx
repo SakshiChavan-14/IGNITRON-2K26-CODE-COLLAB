@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   CheckCircle2,
   ArrowRight,
+  Lock,
 } from 'lucide-react';
 import CodeMirror, { EditorView, keymap } from '@uiw/react-codemirror';
 import { cpp } from '@codemirror/lang-cpp';
@@ -390,9 +391,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
 
       setSubmitFeedback({
         type: 'success',
-        message: `${
-          roundNumber === 3 ? `Case ${activeCase}` : 'Solution'
-        } submitted successfully! Queued for judge evaluation.`,
+        message: 'Submission Received Successfully! Your answers have been recorded. The administrators will now evaluate the round.',
       });
       setConfirmSubmitOpen(false);
     } catch (err: any) {
@@ -405,18 +404,34 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
     }
   };
 
-  // Access Denied Screen (Security Guarding)
+  // Access Denied / Locked Screen (Security Guarding)
   if (accessDeniedError) {
+    const isLockedPreRound = accessDeniedError.toLowerCase().includes('will become available');
+
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-slate-100">
-        <div className="max-w-md w-full bg-slate-900 border border-red-500/30 rounded-3xl p-8 text-center space-y-5 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 flex items-center justify-center mx-auto">
-            <ShieldAlert className="w-8 h-8" />
+        <div
+          className={`max-w-md w-full bg-slate-900 border ${
+            isLockedPreRound ? 'border-amber-500/30' : 'border-red-500/30'
+          } rounded-3xl p-8 text-center space-y-5 shadow-2xl`}
+        >
+          <div
+            className={`w-16 h-16 rounded-2xl ${
+              isLockedPreRound
+                ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+                : 'bg-red-500/10 border border-red-500/30 text-red-400'
+            } flex items-center justify-center mx-auto`}
+          >
+            {isLockedPreRound ? <Lock className="w-8 h-8" /> : <ShieldAlert className="w-8 h-8" />}
           </div>
           <div className="space-y-2">
-            <h1 className="text-xl font-bold text-white">Arena Access Restricted</h1>
+            <h1 className="text-xl font-bold text-white">
+              {isLockedPreRound ? `Round ${roundNumber} Arena Locked` : 'Arena Access Restricted'}
+            </h1>
             <p className="text-xs text-slate-400 leading-relaxed">
-              {accessDeniedError}
+              {isLockedPreRound
+                ? 'The competition arena will become available when your round begins. Please wait for the administrator to activate this round.'
+                : accessDeniedError}
             </p>
           </div>
           <button
@@ -497,6 +512,24 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         <div className="bg-amber-600/90 text-white px-4 py-2 text-xs font-mono font-bold flex items-center justify-center gap-2 shadow-xs">
           <PauseCircle className="w-4 h-4 animate-pulse" />
           <span>Tournament paused by Administrator. Editing, test runs, and submissions are temporarily frozen.</span>
+        </div>
+      )}
+
+      {/* Post-Submission Waiting Notification Banner */}
+      {isCurrentCaseSubmitted && (
+        <div className="bg-emerald-950/80 border-b border-emerald-500/30 px-4 py-2.5 flex items-center justify-between text-xs text-emerald-200">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div>
+              <span className="font-bold text-emerald-300">Submission Received Successfully!</span>
+              <span className="text-emerald-400/90 ml-1.5 hidden sm:inline">
+                Your answers have been recorded. The administrators will now evaluate the round and announce shortlisted teams on the dashboard and announcements.
+              </span>
+            </div>
+          </div>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+            Read-Only Mode
+          </span>
         </div>
       )}
 
