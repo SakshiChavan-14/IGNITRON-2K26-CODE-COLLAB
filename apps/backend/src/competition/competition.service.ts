@@ -20,6 +20,7 @@ import {
   AuthUser,
   CompetitionRoundCardItem,
   RoundSummaryDto,
+  ParticipantRoundStatus,
 } from '@ignitron/shared';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -964,19 +965,24 @@ export class CompetitionService implements OnModuleInit {
           (def.roundNumber === 2 && state.status === 'ROUND_2_ACTIVE') ||
           (def.roundNumber === 3 && state.status === 'ROUND_3_ACTIVE'));
 
-      let cardStatus: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'NOT_QUALIFIED' = 'UPCOMING';
+      let cardStatus: ParticipantRoundStatus = 'LOCKED';
       if (teamEligibility === 'INELIGIBLE') {
         cardStatus = 'NOT_QUALIFIED';
       } else if (
-        pStatus === 'SUBMITTED' ||
         (state.currentRoundNumber && state.currentRoundNumber > def.roundNumber) ||
         state.status === 'COMPLETED'
       ) {
         cardStatus = 'COMPLETED';
+      } else if (pStatus === 'SUBMITTED') {
+        cardStatus = 'SUBMITTED';
       } else if (isCurrentActive) {
-        cardStatus = 'ACTIVE';
+        if (pStatus === 'IN_PROGRESS') {
+          cardStatus = 'ACTIVE';
+        } else {
+          cardStatus = 'AVAILABLE';
+        }
       } else {
-        cardStatus = 'UPCOMING';
+        cardStatus = 'LOCKED';
       }
 
       const isScorePublished = dbRound?.isLeaderboardPublished ?? false;

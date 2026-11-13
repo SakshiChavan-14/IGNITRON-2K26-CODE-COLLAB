@@ -508,13 +508,21 @@ export interface TeamRoundHistoryItem {
   evaluatedAt: string | null;
 }
 
+export type ParticipantRoundStatus =
+  | 'LOCKED'
+  | 'AVAILABLE'
+  | 'ACTIVE'
+  | 'SUBMITTED'
+  | 'COMPLETED'
+  | 'NOT_QUALIFIED';
+
 export interface CompetitionRoundCardItem {
   roundNumber: number;
   name: string;
   description: string;
   durationMinutes: number;
   maximumMarks: number;
-  status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'NOT_QUALIFIED';
+  status: ParticipantRoundStatus | 'UPCOMING';
   teamEligibility: EligibilityStatus;
   participationStatus: ParticipationStatus;
   isCurrent: boolean;
