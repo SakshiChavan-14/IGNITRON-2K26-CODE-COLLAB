@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { questionAndArenaService } from '../../services/question-and-arena.service';
+import { useCompetitionState, useServerTimer } from '../../hooks/useCompetition';
 import {
   SanitizedQuestionDto,
   McqSubmissionResultDto,
@@ -19,10 +20,13 @@ import {
   ArrowRight,
   Trophy,
   AlertCircle,
+  Eye,
+  PauseCircle,
 } from 'lucide-react';
 
 export const McqArenaPage: React.FC = () => {
   const navigate = useNavigate();
+  const { data: compState } = useCompetitionState();
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +39,11 @@ export const McqArenaPage: React.FC = () => {
   >({});
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [submissionResult, setSubmissionResult] = useState<McqSubmissionResultDto | null>(null);
+  const [reviewMode, setReviewMode] = useState<boolean>(false);
 
-  // Timer State
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(30 * 60);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
+  // Timer State from initial fetch
+  const [initialRemainingSeconds, setInitialRemainingSeconds] = useState<number>(30 * 60);
+  const [initialPaused, setInitialPaused] = useState<boolean>(false);
 
   // Autosave indicator
   const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'error'>('saved');
@@ -46,6 +51,14 @@ export const McqArenaPage: React.FC = () => {
   // Submit Modal
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  // Active competition timer
+  const effectiveIsPaused = compState?.isPaused ?? initialPaused;
+  const timer = useServerTimer(
+    compState?.deadlineAt,
+    effectiveIsPaused,
+    compState?.remainingDurationSeconds ?? initialRemainingSeconds,
+  );
 
   // Fetch initial arena state
   const loadArenaState = async () => {
@@ -55,12 +68,11 @@ export const McqArenaPage: React.FC = () => {
       const state = await questionAndArenaService.getMcqArenaState();
       setQuestions(state.questions);
       setAnswers(state.answers || {});
-      setRemainingSeconds(state.remainingSeconds);
-      setIsPaused(state.isPaused);
+      setInitialRemainingSeconds(state.remainingSeconds);
+      setInitialPaused(state.isPaused);
       setIsSubmitted(state.isSubmitted);
 
       if (state.isSubmitted) {
-        // Fetch result
         const res = await questionAndArenaService.submitMcqRound();
         setSubmissionResult(res);
       }
@@ -75,28 +87,16 @@ export const McqArenaPage: React.FC = () => {
     loadArenaState();
   }, []);
 
-  // Timer Countdown Effect
+  // Timer Expiration Auto-Submit
   useEffect(() => {
-    if (isSubmitted || isPaused || remainingSeconds <= 0) return;
-
-    const timer = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          // Auto-submit when time expires
-          handleFinalSubmit(true);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [isSubmitted, isPaused, remainingSeconds]);
+    if (timer.isExpired && !isSubmitted && !loading && questions.length > 0) {
+      handleFinalSubmit(true);
+    }
+  }, [timer.isExpired, isSubmitted, loading, questions.length]);
 
   // Handle Option Selection
   const handleSelectOption = async (optionIndex: number) => {
-    if (isSubmitted) return;
+    if (isSubmitted || effectiveIsPaused || reviewMode) return;
     const currentQ = questions[currentIndex];
     if (!currentQ) return;
 
@@ -126,7 +126,7 @@ export const McqArenaPage: React.FC = () => {
 
   // Handle Flag Toggle
   const handleToggleFlag = async () => {
-    if (isSubmitted) return;
+    if (isSubmitted || effectiveIsPaused || reviewMode) return;
     const currentQ = questions[currentIndex];
     if (!currentQ) return;
 
@@ -156,6 +156,7 @@ export const McqArenaPage: React.FC = () => {
 
   // Final Submission
   const handleFinalSubmit = async (autoSubmit = false) => {
+    if (isSubmitted || submitting) return;
     setSubmitting(true);
     try {
       const res = await questionAndArenaService.submitMcqRound({ autoSubmit });
@@ -167,13 +168,6 @@ export const McqArenaPage: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  // Format time MM:SS
-  const formatTime = (secs: number) => {
-    const mins = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${mins.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   const currentQuestion = questions[currentIndex];
@@ -192,8 +186,8 @@ export const McqArenaPage: React.FC = () => {
     );
   }
 
-  // Submitted Completion Screen
-  if (isSubmitted && submissionResult) {
+  // Submitted Completion Screen (Only shown when not reviewing)
+  if (isSubmitted && submissionResult && !reviewMode) {
     return (
       <div className="min-h-screen bg-[#f8faf9] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200 shadow-xl p-8 text-center space-y-6">
@@ -239,13 +233,23 @@ export const McqArenaPage: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={() => navigate('/team/dashboard')}
-            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2"
-          >
-            <span>Return to Team Dashboard</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => setReviewMode(true)}
+              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-2 border border-slate-300"
+            >
+              <Eye className="w-4 h-4 text-slate-600" />
+              <span>Review Submitted Answers</span>
+            </button>
+
+            <button
+              onClick={() => navigate('/team/dashboard')}
+              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2"
+            >
+              <span>Return to Team Dashboard</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -270,40 +274,74 @@ export const McqArenaPage: React.FC = () => {
             <span className="hidden md:inline-block h-5 w-px bg-slate-200 mx-1" />
 
             {/* Autosave Status Indicator */}
-            <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-slate-500">
-              {savingStatus === 'saving' ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                  <span>Autosaving answer...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Answers synced</span>
-                </>
-              )}
+            {!reviewMode && !isSubmitted && (
+              <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-slate-500">
+                {savingStatus === 'saving' ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                    <span>Autosaving answer...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Answers synced</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {reviewMode && (
+              <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-emerald-800 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                <span>Submitted Answers (Score: {submissionResult?.score.toFixed(1)} / 30)</span>
+              </div>
+            )}
+          </div>
+
+          {/* Center Timer / Review Mode Badge */}
+          {reviewMode ? (
+            <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-xl border border-slate-300 bg-slate-100 text-slate-700 font-mono shadow-xs text-xs font-bold">
+              <Eye className="w-3.5 h-3.5 text-slate-500" />
+              <span>Read-Only Review Mode</span>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-950 font-mono shadow-xs">
+              <Clock className={`w-4 h-4 ${timer.secondsLeft < 300 ? 'text-red-600 animate-pulse' : 'text-emerald-700'}`} />
+              <span className="text-xs font-bold text-slate-600 hidden sm:inline">Time Left:</span>
+              <span className={`text-sm sm:text-base font-black ${timer.secondsLeft < 300 ? 'text-red-600' : 'text-emerald-950'}`}>
+                {timer.formatted}
+              </span>
+            </div>
+          )}
 
-          {/* Center Timer */}
-          <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-950 font-mono shadow-xs">
-            <Clock className={`w-4 h-4 ${remainingSeconds < 300 ? 'text-red-600 animate-pulse' : 'text-emerald-700'}`} />
-            <span className="text-xs font-bold text-slate-600 hidden sm:inline">Time Left:</span>
-            <span className={`text-sm sm:text-base font-black ${remainingSeconds < 300 ? 'text-red-600' : 'text-emerald-950'}`}>
-              {formatTime(remainingSeconds)}
-            </span>
-          </div>
-
-          {/* Right Submit Button */}
-          <button
-            onClick={() => setConfirmSubmitOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Submit Round 1</span>
-          </button>
+          {/* Right Action Button */}
+          {reviewMode ? (
+            <button
+              onClick={() => setReviewMode(false)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition"
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              <span>Back to Score Card</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setConfirmSubmitOpen(true)}
+              disabled={isSubmitted || effectiveIsPaused}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition disabled:opacity-50"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Submit Round 1</span>
+            </button>
+          )}
         </div>
       </header>
+
+      {/* Paused Banner */}
+      {effectiveIsPaused && !isSubmitted && (
+        <div className="bg-amber-500 text-white px-4 py-2.5 text-xs font-mono font-bold flex items-center justify-center gap-2 shadow-xs">
+          <PauseCircle className="w-4 h-4 animate-pulse" />
+          <span>Tournament paused by Administrator. Timer and submissions are temporarily held.</span>
+        </div>
+      )}
 
       {error && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 w-full">
@@ -337,10 +375,11 @@ export const McqArenaPage: React.FC = () => {
                 const isCurrent = idx === currentIndex;
 
                 let btnStyle = 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200';
-                if (isAnswered) {
+                if (isAnswered && isFlagged) {
+                  btnStyle = 'bg-amber-500 text-white border-amber-600 ring-2 ring-emerald-400';
+                } else if (isAnswered) {
                   btnStyle = 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700';
-                }
-                if (isFlagged) {
+                } else if (isFlagged) {
                   btnStyle = 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600';
                 }
 
@@ -440,10 +479,14 @@ export const McqArenaPage: React.FC = () => {
                       <div
                         key={optIdx}
                         onClick={() => handleSelectOption(optIdx)}
-                        className={`p-4 rounded-xl border cursor-pointer transition flex items-center gap-3.5 ${
+                        className={`p-4 rounded-xl border transition flex items-center gap-3.5 ${
+                          reviewMode || isSubmitted || effectiveIsPaused
+                            ? 'cursor-default'
+                            : 'cursor-pointer hover:border-slate-300 hover:bg-slate-50/50'
+                        } ${
                           isSelected
                             ? 'border-emerald-600 bg-emerald-50/80 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                            : 'border-slate-200'
                         }`}
                       >
                         <div
@@ -461,7 +504,14 @@ export const McqArenaPage: React.FC = () => {
                         </span>
 
                         {isSelected && (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {reviewMode && (
+                              <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300 hidden sm:inline">
+                                Your Selection
+                              </span>
+                            )}
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          </div>
                         )}
                       </div>
                     );

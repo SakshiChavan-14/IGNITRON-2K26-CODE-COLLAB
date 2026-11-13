@@ -39,30 +39,27 @@ export const useServerTimer = (
   isPaused: boolean,
   remainingSecondsFromServer: number | null | undefined,
 ) => {
-  const [secondsLeft, setSecondsLeft] = useState<number>(0);
+  const [secondsLeft, setSecondsLeft] = useState<number>(remainingSecondsFromServer ?? 0);
 
   useEffect(() => {
     if (isPaused) {
-      setSecondsLeft(remainingSecondsFromServer || 0);
+      setSecondsLeft(remainingSecondsFromServer ?? 0);
       return;
     }
 
-    if (!deadlineAt) {
+    if (remainingSecondsFromServer !== null && remainingSecondsFromServer !== undefined) {
+      setSecondsLeft(remainingSecondsFromServer);
+    } else if (deadlineAt) {
+      const deadline = new Date(deadlineAt).getTime();
+      const now = Date.now();
+      setSecondsLeft(Math.max(0, Math.floor((deadline - now) / 1000)));
+    } else {
       setSecondsLeft(0);
       return;
     }
 
-    const calculateRemaining = () => {
-      const deadline = new Date(deadlineAt).getTime();
-      const now = Date.now();
-      const diffSeconds = Math.max(0, Math.floor((deadline - now) / 1000));
-      return diffSeconds;
-    };
-
-    setSecondsLeft(calculateRemaining());
-
     const interval = setInterval(() => {
-      setSecondsLeft(calculateRemaining());
+      setSecondsLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(interval);
