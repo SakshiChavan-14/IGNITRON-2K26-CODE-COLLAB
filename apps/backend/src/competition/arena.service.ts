@@ -91,6 +91,19 @@ export class ArenaService {
       round.status === 'ACTIVE' ||
       (isRoundCurrent && state?.status === (`ROUND_${roundNumber}_ACTIVE` as any));
 
+    // CHANGE 6: Enforce workspace lock before round start on backend
+    if (action === 'READ') {
+      const isConcludedOrSubmitted =
+        round.status === 'COMPLETED' ||
+        progress.participationStatus === 'SUBMITTED';
+
+      if (!isRoundActive && !isConcludedOrSubmitted) {
+        throw new ForbiddenException(
+          `The competition arena will become available when Round ${roundNumber} begins.`,
+        );
+      }
+    }
+
     // If writing or submitting, enforce strict timing & state boundaries
     if (action === 'WRITE' || action === 'SUBMIT') {
       if (state?.isPaused) {
@@ -108,6 +121,12 @@ export class ArenaService {
         state.remainingDurationSeconds <= 0
       ) {
         throw new BadRequestException(`Round ${roundNumber} deadline has expired.`);
+      }
+
+      if (roundNumber === 1 || roundNumber === 2) {
+        if (progress.participationStatus === 'SUBMITTED') {
+          throw new BadRequestException(`Round ${roundNumber} has already been submitted by your team.`);
+        }
       }
     }
 
