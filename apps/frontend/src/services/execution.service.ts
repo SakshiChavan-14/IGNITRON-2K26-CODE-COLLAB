@@ -4,24 +4,14 @@ import {
   SupportedLanguageItem,
   ApiResponse,
 } from '@ignitron/shared';
-
-const API_BASE = '/api/execution';
+import { apiClient } from './api';
 
 export const executionService = {
   /**
    * Fetch officially supported languages from backend
    */
   async getSupportedLanguages(): Promise<SupportedLanguageItem[]> {
-    const res = await fetch(`${API_BASE}/languages`, {
-      headers: {
-        'Accept': 'application/json',
-      },
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to load supported languages (HTTP ${res.status})`);
-    }
-    const data = await res.json();
+    const data = await apiClient<{ languages: SupportedLanguageItem[] }>('/execution/languages');
     return data.languages;
   },
 
@@ -29,67 +19,26 @@ export const executionService = {
    * Check Judge0 service health
    */
   async getHealth(): Promise<{ status: string; judge0Url: string }> {
-    const res = await fetch(`${API_BASE}/health`, {
-      headers: {
-        'Accept': 'application/json',
-      },
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to check execution health (HTTP ${res.status})`);
-    }
-    return res.json();
+    return apiClient<{ status: string; judge0Url: string }>('/execution/health');
   },
 
   /**
    * Execute sample code / test run
    */
   async runCode(dto: CodeExecutionRequestDto): Promise<CodeExecutionResultDto> {
-    const res = await fetch(`${API_BASE}/run`, {
+    const data = await apiClient<ApiResponse<{ result: CodeExecutionResultDto }>>('/execution/run', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      credentials: 'include',
       body: JSON.stringify(dto),
     });
-
-    const body: ApiResponse<{ result: CodeExecutionResultDto }> = await res.json();
-
-    if (!res.ok) {
-      const errorMsg =
-        (body as any)?.message ||
-        (body as any)?.error?.message ||
-        `Code execution rejected (HTTP ${res.status})`;
-      throw new Error(errorMsg);
-    }
-
-    return (body as any).result;
+    return (data as any).result;
   },
 
   /**
    * Retrieve execution output by ID
    */
   async getResult(id: string): Promise<CodeExecutionResultDto> {
-    const res = await fetch(`${API_BASE}/result/${id}`, {
-      headers: {
-        'Accept': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    const body: ApiResponse<{ result: CodeExecutionResultDto }> = await res.json();
-
-    if (!res.ok) {
-      const errorMsg =
-        (body as any)?.message ||
-        (body as any)?.error?.message ||
-        `Failed to retrieve execution result (HTTP ${res.status})`;
-      throw new Error(errorMsg);
-    }
-
-    return (body as any).result;
+    const data = await apiClient<ApiResponse<{ result: CodeExecutionResultDto }>>(`/execution/result/${id}`);
+    return (data as any).result;
   },
 };
 

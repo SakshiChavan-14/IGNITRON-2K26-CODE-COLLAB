@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
   Code2,
   Play,
@@ -9,6 +9,11 @@ import {
   Terminal,
   Check,
   ChevronLeft,
+  Clock,
+  PauseCircle,
+  ShieldAlert,
+  CheckCircle2,
+  ArrowRight,
 } from 'lucide-react';
 import CodeMirror, { EditorView, keymap } from '@uiw/react-codemirror';
 import { cpp } from '@codemirror/lang-cpp';
@@ -20,6 +25,7 @@ import { indentWithTab } from '@codemirror/commands';
 
 import { executionService } from '../../services/execution.service';
 import { questionAndArenaService } from '../../services/question-and-arena.service';
+import { useCompetitionState, useServerTimer } from '../../hooks/useCompetition';
 import {
   CodeExecutionResultDto,
   SanitizedQuestionDto,
@@ -57,16 +63,44 @@ const customDarkTheme = EditorView.theme({
   },
 });
 
+interface CaseDraftCache {
+  code: string;
+  language: string;
+  version: number;
+  isLoaded: boolean;
+  isSubmitted: boolean;
+  submissionId?: string | null;
+  submittedAt?: string | null;
+}
+
 export const CodingWorkspacePreviewPage: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const roundNumber = searchParams.get('round') ? parseInt(searchParams.get('round')!, 10) : 2;
   const [activeCase, setActiveCase] = useState<number>(1);
 
+  // Authoritative Competition State & Timer
+  const { data: compState } = useCompetitionState();
+  const isCompetitionPaused = Boolean(compState?.isPaused);
+  const timer = useServerTimer(
+    compState?.deadlineAt,
+    isCompetitionPaused,
+    compState?.remainingDurationSeconds,
+  );
+
   const [questions, setQuestions] = useState<SanitizedQuestionDto[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<SanitizedQuestionDto | null>(null);
 
-  const [language, setLanguage] = useState<'cpp' | 'python' | 'java' | 'javascript'>('typescript' as any);
+  const [language, setLanguage] = useState<'cpp' | 'python' | 'java' | 'javascript' | 'typescript'>('typescript');
+  const [code, setCode] = useState('');
+
+  // Per-Case isolated state caching (prevents case overwrites during switching)
+  const [caseDrafts, setCaseDrafts] = useState<Record<number, CaseDraftCache>>({});
+  const [submittedCases, setSubmittedCases] = useState<number[]>([]);
+  const [isRoundSubmitted, setIsRoundSubmitted] = useState<boolean>(false);
+  const [accessDeniedError, setAccessDeniedError] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState<'sample' | 'custom' | 'output'>('sample');
   const [customInput, setCustomInput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
@@ -81,12 +115,14 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
   const lastSavedLangRef = useRef<string>('');
   const isInitialLoadedRef = useRef<boolean>(false);
 
-  const [code, setCode] = useState('');
-
   // Submission State
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitFeedback, setSubmitFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Check if current case/round is submitted
+  const isCurrentCaseSubmitted =
+    roundNumber === 2 ? isRoundSubmitted : submittedCases.includes(activeCase);
 
   // 1. Load round questions
   useEffect(() => {
@@ -103,7 +139,12 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
           setCurrentQuestion(qs[0] || null);
         }
       })
-      .catch((err) => console.warn('Could not load questions:', err.message));
+      .catch((err) => {
+        if (!isMounted) return;
+        if (err?.status === 403 || err?.message?.includes('not qualified')) {
+          setAccessDeniedError(err.message);
+        }
+      });
 
     return () => {
       isMounted = false;
@@ -118,39 +159,62 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
     }
   }, [activeCase, questions, roundNumber]);
 
-  // 2. Load draft whenever round or case changes
-  useEffect(() => {
-    let isMounted = true;
-    isInitialLoadedRef.current = false;
-    setSaveStatus('idle');
+  // 2. Load draft for specific case
+  const loadCaseDraft = useCallback(
+    async (caseNum: number) => {
+      isInitialLoadedRef.current = false;
+      setSaveStatus('idle');
 
-    // Load saved team draft for current round and case
-    questionAndArenaService
-      .getWorkspaceDraft(roundNumber, activeCase)
-      .then((draft) => {
-        if (!isMounted) return;
+      try {
+        const draft = await questionAndArenaService.getWorkspaceDraft(roundNumber, caseNum);
         setCode(draft.sourceCode);
         setLanguage((draft.language as any) || 'typescript');
         versionRef.current = draft.version;
         lastSavedCodeRef.current = draft.sourceCode;
         lastSavedLangRef.current = draft.language;
+
+        if (roundNumber === 2 && (draft as any).isSubmitted) {
+          setIsRoundSubmitted(true);
+        }
+        if ((draft as any).submittedCases) {
+          setSubmittedCases((draft as any).submittedCases);
+        }
+
+        setCaseDrafts((prev) => ({
+          ...prev,
+          [caseNum]: {
+            code: draft.sourceCode,
+            language: draft.language,
+            version: draft.version,
+            isLoaded: true,
+            isSubmitted: Boolean((draft as any).isSubmitted),
+            submissionId: (draft as any).submissionId,
+            submittedAt: (draft as any).submittedAt,
+          },
+        }));
+
         isInitialLoadedRef.current = true;
         setSaveStatus('saved');
-      })
-      .catch((err) => {
-        if (!isMounted) return;
+      } catch (err: any) {
+        if (err?.status === 403 || err?.message?.includes('not qualified')) {
+          setAccessDeniedError(err.message);
+        } else {
+          console.warn('Could not load draft from backend:', err?.message);
+        }
         isInitialLoadedRef.current = true;
-        console.warn('Could not load draft from backend:', err.message);
-      });
+      }
+    },
+    [roundNumber],
+  );
 
-    return () => {
-      isMounted = false;
-    };
-  }, [roundNumber, activeCase]);
+  useEffect(() => {
+    loadCaseDraft(activeCase);
+  }, [roundNumber, activeCase, loadCaseDraft]);
 
   // 3. Debounced Autosave: Save to backend after 800ms of inactivity
   useEffect(() => {
     if (!isInitialLoadedRef.current) return;
+    if (isCompetitionPaused || isCurrentCaseSubmitted) return;
 
     if (code === lastSavedCodeRef.current && language === lastSavedLangRef.current) {
       return;
@@ -171,6 +235,17 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         versionRef.current = updated.version;
         lastSavedCodeRef.current = code;
         lastSavedLangRef.current = language;
+
+        setCaseDrafts((prev) => ({
+          ...prev,
+          [activeCase]: {
+            ...(prev[activeCase] || { isLoaded: true, isSubmitted: false }),
+            code,
+            language,
+            version: updated.version,
+          },
+        }));
+
         setSaveStatus('saved');
       } catch (err: any) {
         setSaveStatus('failed');
@@ -179,7 +254,49 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [code, language, roundNumber, activeCase]);
+  }, [code, language, roundNumber, activeCase, isCompetitionPaused, isCurrentCaseSubmitted]);
+
+  // Safe Case Switching with Flush
+  const handleSelectCase = async (targetCase: number) => {
+    if (targetCase === activeCase) return;
+
+    // 1. Immediately cache current case's edits
+    setCaseDrafts((prev) => ({
+      ...prev,
+      [activeCase]: {
+        ...(prev[activeCase] || { version: versionRef.current, isLoaded: true, isSubmitted: false }),
+        code,
+        language,
+      },
+    }));
+
+    // 2. If unsaved changes exist for current case, flush to backend immediately
+    if (code !== lastSavedCodeRef.current && !isCurrentCaseSubmitted && !isCompetitionPaused) {
+      questionAndArenaService
+        .saveWorkspaceDraft({
+          sourceCode: code,
+          language,
+          roundNumber,
+          caseNumber: activeCase,
+        })
+        .catch((err) => console.warn('Case switch draft flush failed:', err.message));
+    }
+
+    // 3. Switch active case
+    setActiveCase(targetCase);
+
+    // 4. If target case already cached, mount immediately
+    if (caseDrafts[targetCase]?.isLoaded) {
+      const cached = caseDrafts[targetCase];
+      setCode(cached.code);
+      setLanguage(cached.language as any);
+      lastSavedCodeRef.current = cached.code;
+      lastSavedLangRef.current = cached.language;
+      versionRef.current = cached.version;
+      setSaveStatus('saved');
+      isInitialLoadedRef.current = true;
+    }
+  };
 
   // 4. Configure CodeMirror extensions based on active language
   const extensions = useMemo(() => {
@@ -192,7 +309,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         case 'python':
           return python();
         case 'javascript':
-          return javascript();
+        case 'typescript':
         default:
           return javascript();
       }
@@ -215,6 +332,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
   };
 
   const handleRunCode = async (sampleStdin?: string) => {
+    if (isCompetitionPaused) return;
     setIsRunning(true);
     setRunError(null);
     setActiveTab('output');
@@ -243,6 +361,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
 
   // Final Code Submission
   const handleSubmitSolution = async () => {
+    if (isCompetitionPaused || isCurrentCaseSubmitted) return;
     setIsSubmitting(true);
     setSubmitFeedback(null);
     try {
@@ -252,9 +371,28 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         sourceCode: code,
         language,
       });
+
+      if (roundNumber === 2) {
+        setIsRoundSubmitted(true);
+      } else if (roundNumber === 3) {
+        setSubmittedCases((prev) => Array.from(new Set([...prev, activeCase])));
+      }
+
+      setCaseDrafts((prev) => ({
+        ...prev,
+        [activeCase]: {
+          ...(prev[activeCase] || { code, language, version: 1, isLoaded: true }),
+          isSubmitted: true,
+          submissionId: res.submissionId,
+          submittedAt: res.submittedAt,
+        },
+      }));
+
       setSubmitFeedback({
         type: 'success',
-        message: `Solution submitted successfully (ID: ${res.submissionId.slice(-6)}). Queued for evaluation.`,
+        message: `${
+          roundNumber === 3 ? `Case ${activeCase}` : 'Solution'
+        } submitted successfully! Queued for judge evaluation.`,
       });
       setConfirmSubmitOpen(false);
     } catch (err: any) {
@@ -266,6 +404,32 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
+  // Access Denied Screen (Security Guarding)
+  if (accessDeniedError) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-slate-100">
+        <div className="max-w-md w-full bg-slate-900 border border-red-500/30 rounded-3xl p-8 text-center space-y-5 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-bold text-white">Arena Access Restricted</h1>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {accessDeniedError}
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/team/dashboard')}
+            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2"
+          >
+            <span>Return to Team Dashboard</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-4.1rem)] bg-slate-950 text-slate-100 overflow-hidden">
@@ -290,6 +454,23 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Center Countdown Timer */}
+        <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-900/90 border border-slate-700 font-mono text-xs">
+          <Clock
+            className={`w-3.5 h-3.5 ${
+              timer.secondsLeft < 300 ? 'text-red-400 animate-pulse' : 'text-emerald-400'
+            }`}
+          />
+          <span className="text-[11px] text-slate-400 hidden sm:inline">Time Remaining:</span>
+          <span
+            className={`font-black ${
+              timer.secondsLeft < 300 ? 'text-red-400' : 'text-emerald-300'
+            }`}
+          >
+            {timer.formatted}
+          </span>
+        </div>
+
         <div className="flex items-center gap-2">
           {submitFeedback && (
             <span
@@ -311,6 +492,14 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Paused Tournament Notice */}
+      {isCompetitionPaused && (
+        <div className="bg-amber-600/90 text-white px-4 py-2 text-xs font-mono font-bold flex items-center justify-center gap-2 shadow-xs">
+          <PauseCircle className="w-4 h-4 animate-pulse" />
+          <span>Tournament paused by Administrator. Editing, test runs, and submissions are temporarily frozen.</span>
+        </div>
+      )}
+
       {/* Main Workspace Split View */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
         {/* Left Column: Problem Statement (5 columns) */}
@@ -318,26 +507,39 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
           {/* Case Switcher for Round 3 */}
           {roundNumber === 3 && (
             <div className="space-y-1.5 pb-2 border-b border-slate-800">
-              <span className="text-[10px] font-mono uppercase text-slate-400 font-bold block">
-                Select Active Problem Case:
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase text-slate-400 font-bold block">
+                  Select Problem Case:
+                </span>
+                <span className="text-[11px] font-mono text-emerald-400">
+                  {submittedCases.length} / 3 Cases Submitted
+                </span>
+              </div>
               <div className="grid grid-cols-3 gap-2">
-                {[1, 2, 3].map((cNum) => (
-                  <button
-                    key={cNum}
-                    onClick={() => setActiveCase(cNum)}
-                    className={`py-2 px-2 rounded-lg text-xs font-bold font-mono transition border ${
-                      activeCase === cNum
-                        ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    <span>Case {cNum}</span>
-                    <span className="block text-[10px] font-normal opacity-80">
-                      {cNum === 1 ? '20 Pts' : cNum === 2 ? '25 Pts' : '45 Pts'}
-                    </span>
-                  </button>
-                ))}
+                {[1, 2, 3].map((cNum) => {
+                  const isCaseDone = submittedCases.includes(cNum);
+                  return (
+                    <button
+                      key={cNum}
+                      onClick={() => handleSelectCase(cNum)}
+                      className={`py-2 px-2 rounded-lg text-xs font-bold font-mono transition border text-center ${
+                        activeCase === cNum
+                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
+                          : isCaseDone
+                          ? 'bg-slate-900/90 text-emerald-400 border-emerald-800/60 hover:bg-slate-800'
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Case {cNum}</span>
+                        {isCaseDone && <CheckCircle2 className="w-3 h-3 text-emerald-300 shrink-0" />}
+                      </div>
+                      <span className="block text-[10px] font-normal opacity-80">
+                        {cNum === 1 ? '20 Pts' : cNum === 2 ? '25 Pts' : '45 Pts'}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -429,8 +631,9 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
                 <Code2 className="w-4 h-4 text-emerald-400" />
                 <select
                   value={language}
+                  disabled={isCurrentCaseSubmitted || isCompetitionPaused}
                   onChange={(e) => handleLanguageChange(e.target.value as any)}
-                  className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-60"
                 >
                   <option value="typescript">TypeScript</option>
                   <option value="python">Python</option>
@@ -442,19 +645,22 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
 
               {/* Autosave Sync Status Pill */}
               <div className="flex items-center gap-1.5 text-xs font-mono">
-                {saveStatus === 'saving' && (
+                {isCurrentCaseSubmitted ? (
+                  <span className="flex items-center gap-1 text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 text-[11px]">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Submitted (Read-Only)</span>
+                  </span>
+                ) : saveStatus === 'saving' ? (
                   <span className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 text-[11px]">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     <span>Saving...</span>
                   </span>
-                )}
-                {saveStatus === 'saved' && (
+                ) : saveStatus === 'saved' ? (
                   <span className="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[11px]">
                     <Check className="w-3 h-3" />
                     <span>Team Draft Synced</span>
                   </span>
-                )}
-                {saveStatus === 'failed' && (
+                ) : saveStatus === 'failed' ? (
                   <span
                     className="flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 text-[11px]"
                     title={saveError || 'Save failed'}
@@ -462,14 +668,14 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
                     <AlertTriangle className="w-3 h-3" />
                     <span>Save Failed</span>
                   </span>
-                )}
+                ) : null}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleRunCode()}
-                disabled={isRunning}
+                disabled={isRunning || isCompetitionPaused}
                 className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors border border-slate-700 disabled:opacity-50"
               >
                 {isRunning ? (
@@ -487,10 +693,19 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
 
               <button
                 onClick={() => setConfirmSubmitOpen(true)}
-                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+                disabled={isSubmitting || isCurrentCaseSubmitted || isCompetitionPaused}
+                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Submit Solution</span>
+                <span>
+                  {isCurrentCaseSubmitted
+                    ? roundNumber === 3
+                      ? `Case ${activeCase} Submitted`
+                      : 'Solution Submitted'
+                    : roundNumber === 3
+                    ? `Submit Case ${activeCase}`
+                    : 'Submit Solution'}
+                </span>
               </button>
             </div>
           </div>
@@ -503,6 +718,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
               extensions={extensions}
               onChange={handleCodeChange}
               theme={oneDark}
+              editable={!isCurrentCaseSubmitted && !isCompetitionPaused}
               basicSetup={{
                 lineNumbers: true,
                 highlightActiveLineGutter: true,
@@ -557,7 +773,8 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => handleRunCode(currentQuestion?.sampleTestCases?.[0]?.stdin)}
-                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200"
+                      disabled={isCompetitionPaused}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 disabled:opacity-50"
                     >
                       Run Case 1
                     </button>
@@ -570,7 +787,8 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
                   value={customInput}
                   onChange={(e) => setCustomInput(e.target.value)}
                   placeholder="Enter custom stdin payload..."
-                  className="w-full h-full p-2 bg-slate-950 border border-slate-800 rounded font-mono text-xs text-slate-200 resize-none focus:outline-none"
+                  disabled={isCompetitionPaused}
+                  className="w-full h-full p-2 bg-slate-950 border border-slate-800 rounded font-mono text-xs text-slate-200 resize-none focus:outline-none disabled:opacity-50"
                 />
               )}
 
