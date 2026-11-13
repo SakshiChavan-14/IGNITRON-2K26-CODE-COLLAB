@@ -9,19 +9,31 @@ import {
   CheckCircle2,
   Lock,
   Building,
+  Award,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 
 export const LeaderboardManagementPage: React.FC = () => {
-  const [leaderboard, setLeaderboard] = useState<LeaderboardResponseDto | null>(null);
+  const [leaderboard, setLeaderboard] = useState<(LeaderboardResponseDto & { winnerTeam?: any }) | null>(null);
   const [selectedRound, setSelectedRound] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+
+  // Winner declaration modal state
+  const [declareModalOpen, setDeclareModalOpen] = useState(false);
+  const [selectedWinnerId, setSelectedWinnerId] = useState<string>('');
+  const [winnerNotes, setWinnerNotes] = useState<string>('');
+  const [declaring, setDeclaring] = useState(false);
 
   const fetchLeaderboard = async () => {
     try {
       setLoading(true);
       const data = await competitionService.getLeaderboard(selectedRound);
-      setLeaderboard(data);
+      setLeaderboard(data as any);
+      if (data?.entries?.length && !selectedWinnerId) {
+        setSelectedWinnerId((data.entries[0] as any).teamId || '');
+      }
     } catch (err: any) {
       console.error('Failed to load leaderboard', err);
     } finally {
@@ -49,6 +61,30 @@ export const LeaderboardManagementPage: React.FC = () => {
       setToggling(false);
     }
   };
+
+  const handleDeclareWinner = async () => {
+    if (!selectedWinnerId) {
+      alert('Please select a winning team.');
+      return;
+    }
+    try {
+      setDeclaring(true);
+      await competitionService.declareWinner(selectedWinnerId, winnerNotes);
+      setDeclareModalOpen(false);
+      setWinnerNotes('');
+      await fetchLeaderboard();
+      alert('Official winner declared and broadcast to all participants!');
+    } catch (err: any) {
+      alert(err.message || 'Failed to declare official winner');
+    } finally {
+      setDeclaring(false);
+    }
+  };
+
+  // Tie detection among top ranks
+  const topScore = leaderboard?.entries[0]?.score ?? 0;
+  const tiedTeams = leaderboard?.entries.filter((e) => e.score === topScore && topScore > 0) || [];
+  const hasScoreTie = tiedTeams.length > 1;
 
   return (
     <div className="min-h-screen bg-[#f8faf9] pb-12 pt-4">
@@ -97,8 +133,68 @@ export const LeaderboardManagementPage: React.FC = () => {
                 </>
               )}
             </button>
+            <button
+              onClick={() => {
+                if (leaderboard?.entries?.length && !selectedWinnerId) {
+                  setSelectedWinnerId((leaderboard.entries[0] as any).teamId || '');
+                }
+                setDeclareModalOpen(true);
+              }}
+              disabled={loading || !leaderboard?.entries?.length}
+              className="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-xs bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-white cursor-pointer disabled:opacity-50"
+            >
+              <Award className="w-4 h-4" />
+              <span>Declare Official Winner</span>
+            </button>
           </div>
         </div>
+
+        {/* Official Winner Banner if declared */}
+        {leaderboard?.winnerTeam && (
+          <div className="p-6 rounded-3xl bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-emerald-500/15 border-2 border-amber-400/80 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-5 animate-in fade-in">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-white shadow-md shrink-0">
+                <Trophy className="w-7 h-7 text-white" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono uppercase tracking-widest font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                    Official Champion of IGNITRON 2K26
+                  </span>
+                  <span className="text-xs text-slate-500 font-mono">
+                    Declared {new Date(leaderboard.winnerTeam.declaredAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
+                  <span>{leaderboard.winnerTeam.teamName}</span>
+                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300">
+                    {leaderboard.winnerTeam.teamCode}
+                  </span>
+                </h2>
+                <div className="text-xs text-slate-600 flex items-center gap-3">
+                  <span className="flex items-center gap-1">
+                    <Building className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{leaderboard.winnerTeam.institution || 'Verified College'}</span>
+                  </span>
+                  {leaderboard.winnerTeam.participants && (
+                    <span className="text-slate-500">
+                      &bull; Team: {leaderboard.winnerTeam.participants.join(', ')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-3 sm:pt-0 border-amber-200">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-amber-900 font-bold">
+                Grand Cumulative Score
+              </span>
+              <span className="text-3xl font-black font-mono text-emerald-900">
+                {leaderboard.winnerTeam.totalScore} <span className="text-sm font-bold text-emerald-700">pts</span>
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Status Alert Banner */}
         <div
@@ -242,6 +338,119 @@ export const LeaderboardManagementPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Declare Winner Modal */}
+        {declareModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+            <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 sm:p-7 space-y-5 animate-in fade-in zoom-in-95">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-300 text-amber-700 flex items-center justify-center shrink-0">
+                    <Trophy className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-extrabold text-slate-900">
+                      Declare Official Tournament Winner
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Finalize competition results and broadcast the championship banner.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDeclareModalOpen(false)}
+                  className="p-1 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {hasScoreTie && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-bold">Score Tie Detected:</strong>
+                    <span>
+                      {tiedTeams.length} teams share the top score of {topScore} pts. Select the winning team based on the tiebreak policy.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Team Selector */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 uppercase font-mono tracking-wider block">
+                  Select Winning Team:
+                </label>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {leaderboard?.entries.map((entry) => {
+                    const isSelected = selectedWinnerId === (entry as any).teamId;
+                    return (
+                      <div
+                        key={entry.teamCode || entry.teamName}
+                        onClick={() => setSelectedWinnerId((entry as any).teamId || '')}
+                        className={`p-3 rounded-xl border text-xs cursor-pointer transition flex items-center justify-between ${
+                          isSelected
+                            ? 'border-amber-500 bg-amber-50/70 shadow-xs ring-2 ring-amber-400/40'
+                            : 'border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center font-mono font-bold text-[11px] text-slate-600">
+                            #{entry.rank}
+                          </span>
+                          <div>
+                            <div className="font-bold text-slate-900 flex items-center gap-2">
+                              <span>{entry.teamName}</span>
+                              <span className="font-mono text-[10px] text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+                                {entry.teamCode}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500">{entry.institution || 'Verified College'}</div>
+                          </div>
+                        </div>
+                        <span className="font-mono font-black text-amber-800">{entry.score} pts</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 uppercase font-mono tracking-wider block">
+                  Declaration Notes / Panel Citation (Optional):
+                </label>
+                <textarea
+                  value={winnerNotes}
+                  onChange={(e) => setWinnerNotes(e.target.value)}
+                  placeholder="e.g. Winner verified by the evaluation jury. Solved all Round 3 test cases with highest cumulative score."
+                  className="w-full h-20 p-3 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setDeclareModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 font-semibold text-xs hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeclareWinner}
+                  disabled={declaring || !selectedWinnerId}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 text-white font-bold text-xs shadow-xs disabled:opacity-50 inline-flex items-center gap-2 cursor-pointer"
+                >
+                  {declaring ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trophy className="w-3.5 h-3.5" />}
+                  <span>{declaring ? 'Declaring...' : 'Confirm Winner Declaration'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -96,4 +96,18 @@ export const competitionService = {
     });
     return res.data;
   },
+
+  async declareWinner(
+    teamId: string,
+    notes?: string,
+  ): Promise<{ message: string; winner: any }> {
+    const res = await apiClient<{
+      success: boolean;
+      data: { message: string; winner: any };
+    }>('/competition/declare-winner', {
+      method: 'POST',
+      body: JSON.stringify({ teamId, notes }),
+    });
+    return res.data;
+  },
 };
