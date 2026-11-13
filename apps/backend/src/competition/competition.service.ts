@@ -292,6 +292,18 @@ export class CompetitionService implements OnModuleInit {
             },
           });
 
+          const author = await tx.adminAccount.findUnique({ where: { id: adminId } });
+          await tx.announcement.create({
+            data: {
+              title: 'Round 1: MCQ Arena has Begun!',
+              message: 'Round 1 has officially started. All participating teams may now access the MCQ Arena to answer 15 competition questions.',
+              priority: 'HIGH',
+              isPublished: true,
+              publishedAt: now,
+              authorId: author ? adminId : null,
+            },
+          });
+
           return { message: 'Round 1 successfully started' };
         }
 
@@ -345,6 +357,17 @@ export class CompetitionService implements OnModuleInit {
             },
           });
 
+          await tx.announcement.create({
+            data: {
+              title: `Tournament Paused: Round ${currentState.currentRoundNumber || ''}`,
+              message: `Competition Round ${currentState.currentRoundNumber || ''} has been temporarily paused by the administrators. Timers and active arena workspaces are held.`,
+              priority: 'URGENT',
+              isPublished: true,
+              publishedAt: now,
+              authorId: (await tx.adminAccount.findUnique({ where: { id: adminId } })) ? adminId : null,
+            },
+          });
+
           return { message: 'Round paused successfully' };
         }
 
@@ -389,6 +412,17 @@ export class CompetitionService implements OnModuleInit {
                 roundNumber: currentState.currentRoundNumber,
                 newDeadline: newDeadline.toISOString(),
               },
+            },
+          });
+
+          await tx.announcement.create({
+            data: {
+              title: `Tournament Resumed: Round ${currentState.currentRoundNumber || ''}`,
+              message: `Competition Round ${currentState.currentRoundNumber || ''} has resumed. Teams may continue working in their respective arenas.`,
+              priority: 'HIGH',
+              isPublished: true,
+              publishedAt: now,
+              authorId: (await tx.adminAccount.findUnique({ where: { id: adminId } })) ? adminId : null,
             },
           });
 
@@ -441,6 +475,17 @@ export class CompetitionService implements OnModuleInit {
                 endedRound: currentRoundNumber,
                 nextStatus,
               },
+            },
+          });
+
+          await tx.announcement.create({
+            data: {
+              title: `Round ${currentRoundNumber} Concluded`,
+              message: `Round ${currentRoundNumber} has officially ended. All arena inputs are locked and evaluation is now in progress. Results and shortlists will be announced soon.`,
+              priority: 'HIGH',
+              isPublished: true,
+              publishedAt: now,
+              authorId: (await tx.adminAccount.findUnique({ where: { id: adminId } })) ? adminId : null,
             },
           });
 
@@ -507,6 +552,17 @@ export class CompetitionService implements OnModuleInit {
             },
           });
 
+          await tx.announcement.create({
+            data: {
+              title: 'Round 2: Bug Hunt Arena has Begun!',
+              message: `Round 2: Bug Hunt Arena has officially started for ${eligibleR2Count} qualified teams. Enter your coding workspace to debug the token bucket rate limiter.`,
+              priority: 'HIGH',
+              isPublished: true,
+              publishedAt: now,
+              authorId: (await tx.adminAccount.findUnique({ where: { id: adminId } })) ? adminId : null,
+            },
+          });
+
           return { message: 'Round 2 successfully started' };
         }
 
@@ -565,6 +621,17 @@ export class CompetitionService implements OnModuleInit {
               action: 'ROUND_3_STARTED',
               description: `Admin started Round 3: Final Boss Coding (${eligibleR3Count} finalist teams)`,
               metadata: { roundNumber: 3, qualifiedCount: eligibleR3Count },
+            },
+          });
+
+          await tx.announcement.create({
+            data: {
+              title: 'Round 3: Final Boss Coding Relay has Begun!',
+              message: `Round 3: Final Boss Coding Relay is officially live for ${eligibleR3Count} finalist teams! Conquer all 3 problem cases to claim tournament victory.`,
+              priority: 'HIGH',
+              isPublished: true,
+              publishedAt: now,
+              authorId: (await tx.adminAccount.findUnique({ where: { id: adminId } })) ? adminId : null,
             },
           });
 

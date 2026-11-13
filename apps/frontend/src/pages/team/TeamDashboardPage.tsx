@@ -24,6 +24,7 @@ import {
   XCircle,
   FileCode,
   ArrowRight,
+  X,
 } from 'lucide-react';
 
 export const TeamDashboardPage: React.FC = () => {
@@ -37,6 +38,26 @@ export const TeamDashboardPage: React.FC = () => {
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponseDto | null>(null);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+
+  const storageKey = `ignitron_dismissed_announcements_${user?.id || 'team'}`;
+  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismissAnnouncement = (id: string) => {
+    const updated = [...dismissedIds, id];
+    setDismissedIds(updated);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Could not save dismissed announcement to localStorage', e);
+    }
+  };
 
   const timer = useServerTimer(
     teamStatus?.deadlineAt,
@@ -71,6 +92,10 @@ export const TeamDashboardPage: React.FC = () => {
 
     loadAnnouncements();
     loadLeaderboard();
+
+    // Real-time polling for new broadcast announcements
+    const interval = setInterval(loadAnnouncements, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   if (!user || user.type !== 'TEAM') {
@@ -194,6 +219,12 @@ export const TeamDashboardPage: React.FC = () => {
   const participants = teamStatus?.participants || [];
   const participantA = participants[0];
   const participantB = participants[1];
+
+  // Dismissible Popups (Change 5)
+  const activeUnreadAnnouncements = announcements.filter(
+    (a) => !dismissedIds.includes(a.id),
+  );
+  const currentPopupAnnouncement = activeUnreadAnnouncements[0] || null;
 
   return (
     <div className="min-h-screen bg-[#f8faf9] pb-16">
@@ -626,6 +657,81 @@ export const TeamDashboardPage: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Floating Dismissible Announcement Popup (Change 5) */}
+      {currentPopupAnnouncement && (
+        <aside
+          role="alert"
+          aria-live="assertive"
+          className="fixed bottom-6 right-6 z-50 max-w-md w-[calc(100vw-3rem)] animate-in fade-in slide-in-from-bottom-5 duration-300"
+        >
+          <div
+            className={`rounded-2xl p-5 shadow-2xl border backdrop-blur-md text-left relative ${
+              currentPopupAnnouncement.priority === 'URGENT'
+                ? 'bg-rose-950/95 border-rose-500/80 text-white shadow-rose-900/30 ring-2 ring-rose-500/40'
+                : currentPopupAnnouncement.priority === 'HIGH'
+                ? 'bg-amber-950/95 border-amber-500/80 text-white shadow-amber-900/30 ring-2 ring-amber-500/40'
+                : 'bg-emerald-950/95 border-emerald-500/80 text-white shadow-emerald-900/30'
+            }`}
+          >
+            {/* Header: Priority + Category + Dismiss (X) */}
+            <div className="flex items-center justify-between gap-3 mb-2.5">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    currentPopupAnnouncement.priority === 'URGENT'
+                      ? 'bg-rose-400 animate-ping'
+                      : currentPopupAnnouncement.priority === 'HIGH'
+                      ? 'bg-amber-400 animate-pulse'
+                      : 'bg-emerald-400'
+                  }`}
+                />
+                <span className="text-[10px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-white/10 border border-white/20">
+                  {currentPopupAnnouncement.priority} ANNOUNCEMENT
+                </span>
+                {activeUnreadAnnouncements.length > 1 && (
+                  <span className="text-[10px] font-mono text-white/70">
+                    (1 of {activeUnreadAnnouncements.length})
+                  </span>
+                )}
+              </div>
+
+              <button
+                onClick={() => handleDismissAnnouncement(currentPopupAnnouncement.id)}
+                className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Dismiss announcement"
+                title="Dismiss announcement"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Title & Message */}
+            <div className="space-y-1.5 pr-4">
+              <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                <Megaphone className="w-4 h-4 text-emerald-300 shrink-0" />
+                <span>{currentPopupAnnouncement.title}</span>
+              </h4>
+              <p className="text-xs text-white/90 leading-relaxed whitespace-pre-line line-clamp-4">
+                {currentPopupAnnouncement.message}
+              </p>
+            </div>
+
+            {/* Footer: Timestamp & Dismiss Action */}
+            <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-white/10 text-[11px]">
+              <span className="text-white/60 font-mono">
+                {new Date(currentPopupAnnouncement.createdAt).toLocaleTimeString()}
+              </span>
+              <button
+                onClick={() => handleDismissAnnouncement(currentPopupAnnouncement.id)}
+                className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs transition cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
     </div>
   );
 };
