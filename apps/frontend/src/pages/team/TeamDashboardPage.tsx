@@ -14,6 +14,7 @@ import {
 } from '@ignitron/shared';
 import {
   Users,
+  Building,
   Radio,
   Clock,
   Award,
@@ -229,6 +230,58 @@ export const TeamDashboardPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f8faf9] pb-16">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Official Tournament Winner Banner */}
+        {(leaderboard as any)?.winnerTeam && (
+          <div className="p-6 rounded-3xl bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-emerald-500/15 border-2 border-amber-400 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-5 animate-in fade-in">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-white shadow-md shrink-0">
+                <Trophy className="w-7 h-7 text-white" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono uppercase tracking-widest font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                    Official Champion of IGNITRON 2K26
+                  </span>
+                  <span className="text-xs text-slate-500 font-mono">
+                    Declared {new Date((leaderboard as any).winnerTeam.declaredAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
+                  <span>{(leaderboard as any).winnerTeam.teamName}</span>
+                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300">
+                    {(leaderboard as any).winnerTeam.teamCode}
+                  </span>
+                </h2>
+                <div className="text-xs text-slate-600 flex items-center gap-3">
+                  <span className="flex items-center gap-1">
+                    <Building className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{(leaderboard as any).winnerTeam.institution || 'Verified College'}</span>
+                  </span>
+                  {(leaderboard as any).winnerTeam.participants && (
+                    <span className="text-slate-500">
+                      &bull; Team: {(leaderboard as any).winnerTeam.participants.join(', ')}
+                    </span>
+                  )}
+                </div>
+                {(leaderboard as any).winnerTeam.notes && (
+                  <p className="text-xs text-amber-900 italic mt-1 bg-amber-50/80 p-2 rounded-xl border border-amber-200/80">
+                    "{(leaderboard as any).winnerTeam.notes}"
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex md:flex-col items-center md:items-end justify-between border-t md:border-t-0 pt-3 md:pt-0 border-amber-200">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-amber-900 font-bold">
+                Grand Cumulative Score
+              </span>
+              <span className="text-3xl font-black font-mono text-emerald-900">
+                {(leaderboard as any).winnerTeam.totalScore} <span className="text-sm font-bold text-emerald-700">pts</span>
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Section E: Live Tournament State & Concurrency Banner */}
         {teamStatus && (
           <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
