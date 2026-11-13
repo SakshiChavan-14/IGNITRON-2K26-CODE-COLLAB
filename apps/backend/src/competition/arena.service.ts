@@ -35,48 +35,92 @@ export class ArenaService {
   }
 
   /**
-   * Helper to fetch or create TeamRoundProgress
+   * Helper to fetch or create TeamRoundProgress with strict eligibility checks
    */
-  private async getOrCreateTeamProgress(teamId: string, roundId: string) {
+  private async getOrCreateTeamProgress(teamId: string, roundId: string, roundNumber: number) {
     let progress = await this.prisma.teamRoundProgress.findUnique({
       where: { teamId_roundId: { teamId, roundId } },
     });
+
     if (!progress) {
-      progress = await this.prisma.teamRoundProgress.create({
-        data: {
-          teamId,
-          roundId,
-          eligibilityStatus: 'ELIGIBLE',
-          participationStatus: 'NOT_STARTED',
-          score: 0,
-        },
-      });
+      if (roundNumber === 1) {
+        // Round 1: All registered active teams are eligible by default
+        progress = await this.prisma.teamRoundProgress.create({
+          data: {
+            teamId,
+            roundId,
+            eligibilityStatus: 'ELIGIBLE',
+            participationStatus: 'NOT_STARTED',
+            score: 0,
+          },
+        });
+      } else {
+        // Rounds 2 and 3: Must be shortlisted by an administrator
+        throw new ForbiddenException(
+          `Your team is not qualified for Round ${roundNumber}. Only shortlisted teams may participate.`,
+        );
+      }
     }
+
+    if (progress.eligibilityStatus !== 'ELIGIBLE') {
+      throw new ForbiddenException(
+        `Your team is not qualified for Round ${roundNumber}. Only shortlisted teams may participate.`,
+      );
+    }
+
     return progress;
   }
 
   /**
    * Helper to verify if competition round is currently accessible to contestant
    */
-  private async checkRoundAccessible(roundNumber: number) {
+  async assertRoundAccess(
+    teamUser: AuthTeamUser,
+    roundNumber: number,
+    action: 'READ' | 'WRITE' | 'SUBMIT',
+  ) {
+    const round = await this.getRound(roundNumber);
+    const progress = await this.getOrCreateTeamProgress(teamUser.id, round.id, roundNumber);
+
     const state = await this.prisma.competitionState.findUnique({
       where: { id: 'global' },
     });
-    const round = await this.getRound(roundNumber);
 
-    // If global state is not set or round is not active/evaluation
     const isRoundCurrent = state?.currentRoundNumber === roundNumber;
     const isRoundActive =
       round.status === 'ACTIVE' ||
-      state?.status === `ROUND_${roundNumber}_ACTIVE` as any;
+      (isRoundCurrent && state?.status === (`ROUND_${roundNumber}_ACTIVE` as any));
+
+    // If writing or submitting, enforce strict timing & state boundaries
+    if (action === 'WRITE' || action === 'SUBMIT') {
+      if (state?.isPaused) {
+        throw new BadRequestException('Competition is currently paused by the administrator.');
+      }
+
+      if (!isRoundActive) {
+        throw new BadRequestException(`Round ${roundNumber} is not currently active.`);
+      }
+
+      if (
+        isRoundCurrent &&
+        state?.remainingDurationSeconds !== null &&
+        state?.remainingDurationSeconds !== undefined &&
+        state.remainingDurationSeconds <= 0
+      ) {
+        throw new BadRequestException(`Round ${roundNumber} deadline has expired.`);
+      }
+    }
 
     return {
       round,
+      progress,
       state,
-      isRoundCurrent,
       isRoundActive,
       isPaused: Boolean(state?.isPaused),
-      remainingDurationSeconds: state?.remainingDurationSeconds ?? 0,
+      remainingSeconds:
+        isRoundCurrent && state?.remainingDurationSeconds !== null
+          ? state?.remainingDurationSeconds ?? 0
+          : 0,
     };
   }
 
@@ -89,8 +133,7 @@ export class ArenaService {
    * Returns timer, questions (without answers), and team's saved answers.
    */
   async getMcqArenaState(teamUser: AuthTeamUser): Promise<McqArenaStateDto> {
-    const round = await this.getRound(1);
-    const progress = await this.getOrCreateTeamProgress(teamUser.id, round.id);
+    const { round, progress, state } = await this.assertRoundAccess(teamUser, 1, 'READ');
 
     // Fetch questions for Round 1
     const rawQuestions = await this.prisma.question.findMany({
@@ -127,11 +170,6 @@ export class ArenaService {
       };
     }
 
-    // Get current competition timer state
-    const state = await this.prisma.competitionState.findUnique({
-      where: { id: 'global' },
-    });
-
     let remainingSeconds = 30 * 60;
     if (state?.currentRoundNumber === 1 && state.remainingDurationSeconds !== null) {
       remainingSeconds = state.remainingDurationSeconds;
@@ -152,8 +190,7 @@ export class ArenaService {
    * Real-time answer autosave for Round 1 MCQ
    */
   async saveMcqAnswer(teamUser: AuthTeamUser, dto: SaveMcqAnswerDto) {
-    const round = await this.getRound(1);
-    const progress = await this.getOrCreateTeamProgress(teamUser.id, round.id);
+    const { round, progress } = await this.assertRoundAccess(teamUser, 1, 'WRITE');
 
     if (progress.participationStatus === 'SUBMITTED') {
       throw new BadRequestException('Round 1 has already been submitted by your team.');
@@ -214,8 +251,7 @@ export class ArenaService {
    * Final submission and automatic scoring for Round 1 MCQ
    */
   async submitMcqRound(teamUser: AuthTeamUser, autoSubmit = false): Promise<McqSubmissionResultDto> {
-    const round = await this.getRound(1);
-    const progress = await this.getOrCreateTeamProgress(teamUser.id, round.id);
+    const { round, progress } = await this.assertRoundAccess(teamUser, 1, 'SUBMIT');
 
     if (progress.participationStatus === 'SUBMITTED') {
       const breakdown = (progress.scoreBreakdown as any) || {};
@@ -317,7 +353,8 @@ export class ArenaService {
    * Get draft for a team in a specific round and case number
    */
   async getWorkspaceDraft(teamUser: AuthTeamUser, roundNumber: number, caseNumber = 1) {
-    const round = await this.getRound(roundNumber);
+    const { round, progress, isRoundActive, isPaused, remainingSeconds } =
+      await this.assertRoundAccess(teamUser, roundNumber, 'READ');
 
     const draft = await this.prisma.workspaceDraft.findUnique({
       where: {
@@ -329,15 +366,6 @@ export class ArenaService {
       },
     });
 
-    if (draft) {
-      return {
-        sourceCode: draft.sourceCode,
-        language: draft.language,
-        version: draft.version,
-        updatedAt: draft.updatedAt.toISOString(),
-      };
-    }
-
     // Default starter code from question if draft does not exist
     const question = await this.prisma.question.findFirst({
       where: {
@@ -347,11 +375,74 @@ export class ArenaService {
       orderBy: { orderNumber: 'asc' },
     });
 
+    let isCaseSubmitted = false;
+    let submissionId: string | null = null;
+    let submittedAt: string | null = null;
+
+    if (roundNumber === 2) {
+      if (progress.participationStatus === 'SUBMITTED') {
+        isCaseSubmitted = true;
+        submittedAt = progress.submittedAt ? progress.submittedAt.toISOString() : null;
+        const sub = await this.prisma.submission.findFirst({
+          where: { teamId: teamUser.id, roundId: round.id, isTestRun: false },
+          orderBy: { submittedAt: 'desc' },
+        });
+        submissionId = sub?.id || null;
+      }
+    } else if (roundNumber === 3 && question) {
+      const sub = await this.prisma.submission.findFirst({
+        where: {
+          teamId: teamUser.id,
+          roundId: round.id,
+          questionId: question.id,
+          isTestRun: false,
+        },
+        orderBy: { submittedAt: 'desc' },
+      });
+      if (sub) {
+        isCaseSubmitted = true;
+        submissionId = sub.id;
+        submittedAt = sub.submittedAt.toISOString();
+      }
+    }
+
+    const submittedCaseNumbers: number[] = [];
+    if (roundNumber === 3) {
+      const round3Questions = await this.prisma.question.findMany({
+        where: { roundId: round.id, isActive: true },
+      });
+      const qIds = round3Questions.map((q) => q.id);
+      const subs = await this.prisma.submission.findMany({
+        where: {
+          teamId: teamUser.id,
+          roundId: round.id,
+          questionId: { in: qIds },
+          isTestRun: false,
+        },
+        select: { questionId: true },
+      });
+      const submittedQSet = new Set(subs.map((s) => s.questionId));
+      for (const q of round3Questions) {
+        if (q.caseNumber && submittedQSet.has(q.id)) {
+          submittedCaseNumbers.push(q.caseNumber);
+        }
+      }
+    }
+
     return {
-      sourceCode: question?.starterCode || '// Write your solution here\n',
-      language: question?.language || 'typescript',
-      version: 0,
-      updatedAt: new Date().toISOString(),
+      sourceCode:
+        draft?.sourceCode ?? (question?.starterCode || '// Write your solution here\n'),
+      language: draft?.language ?? (question?.language || 'typescript'),
+      version: draft?.version ?? 0,
+      updatedAt: draft?.updatedAt ? draft.updatedAt.toISOString() : new Date().toISOString(),
+      isSubmitted: roundNumber === 2 ? progress.participationStatus === 'SUBMITTED' : isCaseSubmitted,
+      submissionId,
+      submittedAt,
+      submittedCases: submittedCaseNumbers,
+      isRoundActive,
+      isPaused,
+      remainingSeconds,
+      participationStatus: progress.participationStatus,
     };
   }
 
@@ -365,8 +456,25 @@ export class ArenaService {
     sourceCode: string,
     language: string,
   ) {
-    const round = await this.getRound(roundNumber);
-    const progress = await this.getOrCreateTeamProgress(teamUser.id, round.id);
+    const { round, progress } = await this.assertRoundAccess(teamUser, roundNumber, 'WRITE');
+
+    if (roundNumber === 2 && progress.participationStatus === 'SUBMITTED') {
+      throw new BadRequestException('Round 2 has already been submitted by your team.');
+    }
+
+    if (roundNumber === 3) {
+      const question = await this.prisma.question.findFirst({
+        where: { roundId: round.id, caseNumber },
+      });
+      if (question) {
+        const existingSub = await this.prisma.submission.findFirst({
+          where: { teamId: teamUser.id, roundId: round.id, questionId: question.id, isTestRun: false },
+        });
+        if (existingSub) {
+          throw new BadRequestException(`Case ${caseNumber} has already been submitted and cannot be modified.`);
+        }
+      }
+    }
 
     const draft = await this.prisma.workspaceDraft.upsert({
       where: {
@@ -421,8 +529,7 @@ export class ArenaService {
     sourceCode: string,
     language: string,
   ) {
-    const round = await this.getRound(roundNumber);
-    const progress = await this.getOrCreateTeamProgress(teamUser.id, round.id);
+    const { round, progress } = await this.assertRoundAccess(teamUser, roundNumber, 'SUBMIT');
 
     // Resolve question
     const question = await this.prisma.question.findFirst({
@@ -432,6 +539,20 @@ export class ArenaService {
       },
       orderBy: { orderNumber: 'asc' },
     });
+
+    // Check if already submitted
+    if (roundNumber === 2) {
+      if (progress.participationStatus === 'SUBMITTED') {
+        throw new BadRequestException('Round 2 has already been submitted by your team.');
+      }
+    } else if (roundNumber === 3 && question) {
+      const existingSub = await this.prisma.submission.findFirst({
+        where: { teamId: teamUser.id, roundId: round.id, questionId: question.id, isTestRun: false },
+      });
+      if (existingSub) {
+        throw new BadRequestException(`Case ${caseNumber} has already been submitted by your team.`);
+      }
+    }
 
     // Create Submission record
     const submission = await this.prisma.submission.create({
@@ -447,13 +568,45 @@ export class ArenaService {
     });
 
     // Update progress status
-    await this.prisma.teamRoundProgress.update({
-      where: { id: progress.id },
-      data: {
-        participationStatus: 'SUBMITTED',
-        submittedAt: new Date(),
-      },
-    });
+    if (roundNumber === 2) {
+      await this.prisma.teamRoundProgress.update({
+        where: { id: progress.id },
+        data: {
+          participationStatus: 'SUBMITTED',
+          submittedAt: new Date(),
+        },
+      });
+    } else if (roundNumber === 3) {
+      const r3Questions = await this.prisma.question.findMany({
+        where: { roundId: round.id, isActive: true },
+      });
+      const totalCases = r3Questions.length || 3;
+      const allSubs = await this.prisma.submission.findMany({
+        where: { teamId: teamUser.id, roundId: round.id, isTestRun: false },
+        select: { questionId: true },
+      });
+      const submittedQSet = new Set(allSubs.map((s) => s.questionId));
+      const submittedCases: number[] = [];
+      for (const q of r3Questions) {
+        if (q.caseNumber && submittedQSet.has(q.id)) {
+          submittedCases.push(q.caseNumber);
+        }
+      }
+      const isAllCasesSubmitted = submittedCases.length >= totalCases;
+      const currentBreakdown = (progress.scoreBreakdown as any) || {};
+
+      await this.prisma.teamRoundProgress.update({
+        where: { id: progress.id },
+        data: {
+          participationStatus: isAllCasesSubmitted ? 'SUBMITTED' : 'IN_PROGRESS',
+          submittedAt: isAllCasesSubmitted ? new Date() : (progress.submittedAt || null),
+          scoreBreakdown: {
+            ...currentBreakdown,
+            submittedCases,
+          },
+        },
+      });
+    }
 
     // Log submission
     await this.prisma.activityLog.create({

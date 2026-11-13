@@ -4,6 +4,8 @@ import {
   Post,
   Body,
   Query,
+  Param,
+  ParseIntPipe,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -24,6 +26,28 @@ import {
 @Roles('TEAM')
 export class ArenaController {
   constructor(private readonly arenaService: ArenaService) {}
+
+  /**
+   * Contestant: Check access eligibility and competition state for a specific round
+   */
+  @Get('status/:roundNumber')
+  async getRoundAccess(
+    @CurrentUser() teamUser: AuthTeamUser,
+    @Param('roundNumber', ParseIntPipe) roundNumber: number,
+  ) {
+    const data = await this.arenaService.assertRoundAccess(teamUser, roundNumber, 'READ');
+    return {
+      success: true,
+      data: {
+        roundNumber,
+        eligibilityStatus: data.progress.eligibilityStatus,
+        participationStatus: data.progress.participationStatus,
+        isRoundActive: data.isRoundActive,
+        isPaused: data.isPaused,
+        remainingSeconds: data.remainingSeconds,
+      },
+    };
+  }
 
   /**
    * Contestant: Get current MCQ arena state (questions, answers, timer)
