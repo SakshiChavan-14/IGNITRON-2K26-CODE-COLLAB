@@ -1232,11 +1232,103 @@ export class CompetitionService implements OnModuleInit {
           (a.leaderboardPublishedAt?.getTime() || 0),
       )[0]?.leaderboardPublishedAt;
 
+    const winnerLog = await this.prisma.activityLog.findFirst({
+      where: { action: 'OFFICIAL_WINNER_DECLARED' },
+      orderBy: { createdAt: 'desc' },
+    });
+    const winnerTeam = (winnerLog?.metadata as any) || null;
+
     return {
       roundNumber: null,
       isPublished: isAnyPublished,
       publishedAt: latestPublishedAt?.toISOString() || null,
       entries,
+      winnerTeam,
+    } as any;
+  }
+
+  /**
+   * Admin declares official tournament winner after all 3 rounds are evaluated
+   */
+  async declareWinner(dto: { teamId: string; notes?: string }, adminId: string) {
+    if (!dto?.teamId) {
+      throw new BadRequestException('teamId is required to declare official winner');
+    }
+
+    const [team, state, rounds] = await Promise.all([
+      this.prisma.team.findUnique({
+        where: { id: dto.teamId },
+        include: {
+          participants: true,
+          roundProgress: {
+            include: { round: true },
+          },
+        },
+      }),
+      this.getOrCreateGlobalState(),
+      this.prisma.competitionRound.findMany({
+        orderBy: { roundNumber: 'asc' },
+      }),
+    ]);
+
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${dto.teamId} not found`);
+    }
+
+    // Verify round completion / evaluation status
+    const r3 = rounds.find((r) => r.roundNumber === 3);
+    const isRound3Concluded =
+      r3?.status === 'COMPLETED' ||
+      state.status === 'FINAL_EVALUATION' ||
+      state.status === 'COMPLETED';
+    if (!isRound3Concluded) {
+      throw new BadRequestException(
+        'Cannot declare official winner until Round 3 has concluded and final evaluation is reached.',
+      );
+    }
+
+    // Calculate official total score across rounds
+    const totalScore = team.roundProgress.reduce((sum, p) => sum + Number(p.score), 0);
+    const now = new Date();
+
+    const winnerData = {
+      teamId: team.id,
+      teamName: team.teamName,
+      teamCode: team.teamCode,
+      institution: team.institution,
+      totalScore,
+      notes: dto.notes || null,
+      declaredAt: now.toISOString(),
+      participants: team.participants.map((p) => p.fullName),
+    };
+
+    // 1. Audit log
+    await this.prisma.activityLog.create({
+      data: {
+        actorType: 'ADMIN',
+        actorId: adminId,
+        action: 'OFFICIAL_WINNER_DECLARED',
+        description: `Admin officially declared ${team.teamName} (${team.teamCode}) as Champion of IGNITRON 2K26 with ${totalScore} pts`,
+        metadata: winnerData,
+      },
+    });
+
+    // 2. Official broadcast announcement
+    const author = await this.prisma.adminAccount.findUnique({ where: { id: adminId } });
+    await this.prisma.announcement.create({
+      data: {
+        title: `🏆 Official Winner Declared: Team ${team.teamName}!`,
+        message: `Congratulations to ${team.teamName} (${team.teamCode}) from ${team.institution || 'Verified College'} for claiming victory in the IGNITRON 2K26 Code Relay Championship with an outstanding score of ${totalScore} points!`,
+        priority: 'URGENT',
+        isPublished: true,
+        publishedAt: now,
+        authorId: author ? adminId : null,
+      },
+    });
+
+    return {
+      message: `Team ${team.teamName} officially declared tournament winner!`,
+      winner: winnerData,
     };
   }
 

@@ -121,6 +121,21 @@ export class CompetitionController {
   }
 
   /**
+   * Leaderboard: Admin declares official tournament winner
+   */
+  @Post('declare-winner')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  async declareWinner(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: { teamId: string; notes?: string },
+  ) {
+    const result = await this.competitionService.declareWinner(dto, user.id);
+    return { success: true, data: result };
+  }
+
+  /**
    * Administrator: Recent competition activity logs
    */
   @Get('activity-logs')
