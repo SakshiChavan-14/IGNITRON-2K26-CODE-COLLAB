@@ -91,6 +91,25 @@ export const questionAndArenaService = {
     return res.data;
   },
 
+  async checkRoundAccess(roundNumber: number): Promise<{
+    roundNumber: number;
+    eligibilityStatus: string;
+    participationStatus: string;
+    isRoundActive: boolean;
+    isPaused: boolean;
+    remainingSeconds: number;
+  }> {
+    const res = await apiClient<ApiResponseWrapper<{
+      roundNumber: number;
+      eligibilityStatus: string;
+      participationStatus: string;
+      isRoundActive: boolean;
+      isPaused: boolean;
+      remainingSeconds: number;
+    }>>(`/arena/status/${roundNumber}`);
+    return res.data;
+  },
+
   async getMcqArenaState(): Promise<McqArenaStateDto> {
     const res = await apiClient<ApiResponseWrapper<McqArenaStateDto>>('/arena/mcq/state');
     return res.data;
