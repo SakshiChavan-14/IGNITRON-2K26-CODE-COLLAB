@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/auth.service';
@@ -30,6 +30,7 @@ export const TeamLoginPage: React.FC = () => {
   const [emailWarning, setEmailWarning] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const lookupInProgressRef = useRef(false);
 
   const { loginTeam } = useAuth();
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ export const TeamLoginPage: React.FC = () => {
   };
 
   const handleLookup = async (codeToLookup?: string) => {
-    if (lookingUp) return;
+    if (lookupInProgressRef.current) return;
     const rawCode = codeToLookup !== undefined ? codeToLookup : teamCode;
     const trimmed = rawCode.trim();
     if (!trimmed) return;
@@ -73,6 +74,7 @@ export const TeamLoginPage: React.FC = () => {
     setLookupError(null);
     setLoginError(null);
     setLookingUp(true);
+    lookupInProgressRef.current = true;
 
     try {
       const res = await authService.lookupTeam(normalizedCode);
@@ -86,6 +88,7 @@ export const TeamLoginPage: React.FC = () => {
       setTeamName(null);
       setParticipants([]);
     } finally {
+      lookupInProgressRef.current = false;
       setLookingUp(false);
     }
   };

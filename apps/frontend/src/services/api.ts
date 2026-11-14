@@ -40,38 +40,50 @@ export async function apiClient<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(url, {
-    credentials: 'include', // Always send HttpOnly session cookies
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      credentials: 'include', // Always send HttpOnly session cookies
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      'Connection Error',
+      'Unable to connect to backend service. Please verify the backend server is running on port 4000.',
+    );
+  }
+
+  // Safely extract response body text exactly once to guarantee no "body stream already read"
+  let rawText = '';
+  try {
+    if (!response.bodyUsed) {
+      rawText = await response.text();
+    }
+  } catch {
+    rawText = '';
+  }
 
   if (!response.ok) {
     let errorData: unknown;
-    try {
-      // Read body stream exactly once as text to prevent "body stream already read"
-      const rawText = await response.text();
+    if (rawText && rawText.trim()) {
       try {
         errorData = JSON.parse(rawText);
       } catch {
-        errorData = rawText || response.statusText;
+        errorData = rawText.trim();
       }
-    } catch {
+    } else {
       errorData = response.statusText;
     }
     throw new ApiError(response.status, response.statusText, errorData);
   }
 
-  // Handle 204 No Content
-  if (response.status === 204) {
+  // Handle 204 No Content or empty responses
+  if (response.status === 204 || !rawText || !rawText.trim()) {
     return {} as T;
   }
 
-  // Safely parse JSON response body with single-read protection
-  const rawText = await response.text();
-  if (!rawText || !rawText.trim()) {
-    return {} as T;
-  }
   try {
     return JSON.parse(rawText) as T;
   } catch {
