@@ -741,6 +741,27 @@ export class CompetitionService implements OnModuleInit {
       throw new NotFoundException('Required competition rounds not found');
     }
 
+    // Ensure all active teams have a Round 1 progress record if shortlisting into Round 2
+    if (prevRoundNumber === 1) {
+      const activeTeams = await this.prisma.team.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      for (const t of activeTeams) {
+        await this.prisma.teamRoundProgress.upsert({
+          where: { teamId_roundId: { teamId: t.id, roundId: prevRound.id } },
+          update: {},
+          create: {
+            teamId: t.id,
+            roundId: prevRound.id,
+            eligibilityStatus: 'ELIGIBLE',
+            participationStatus: 'NOT_STARTED',
+            score: 0,
+          },
+        });
+      }
+    }
+
     // Get all teams that participated/were eligible in previous round
     const prevProgress = await this.prisma.teamRoundProgress.findMany({
       where: {
@@ -807,6 +828,27 @@ export class CompetitionService implements OnModuleInit {
 
     if (!prevRound || !targetRound) {
       throw new NotFoundException('Required competition rounds not found');
+    }
+
+    // Ensure all active teams have a Round 1 progress record if shortlisting into Round 2
+    if (prevRoundNumber === 1) {
+      const activeTeams = await this.prisma.team.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      for (const t of activeTeams) {
+        await this.prisma.teamRoundProgress.upsert({
+          where: { teamId_roundId: { teamId: t.id, roundId: prevRound.id } },
+          update: {},
+          create: {
+            teamId: t.id,
+            roundId: prevRound.id,
+            eligibilityStatus: 'ELIGIBLE',
+            participationStatus: 'NOT_STARTED',
+            score: 0,
+          },
+        });
+      }
     }
 
     const qualifiedSet = new Set(dto.qualifiedTeamIds);

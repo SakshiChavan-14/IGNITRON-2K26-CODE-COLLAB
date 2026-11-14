@@ -62,7 +62,7 @@ export const CompetitionControlPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUBMITTED' | 'IN_PROGRESS' | 'NOT_STARTED'>('ALL');
   const [sortBy, setSortBy] = useState<'RANK' | 'SCORE_ASC' | 'NAME_ASC'>('RANK');
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [shortlistStep, setShortlistStep] = useState<'SELECT' | 'CONFIRM'>('SELECT');
 
   // Reset Modal State
   const [showResetModal, setShowResetModal] = useState(false);
@@ -89,6 +89,7 @@ export const CompetitionControlPage: React.FC = () => {
 
   const handleOpenShortlisting = async (roundNum: number) => {
     setTargetRound(roundNum);
+    setShortlistStep('SELECT');
     setErrorMsg(null);
     setSuccessMsg(null);
     setShortlistLoading(true);
@@ -141,7 +142,6 @@ export const CompetitionControlPage: React.FC = () => {
       alert('Please select at least one team to qualify.');
       return;
     }
-    setShowConfirmModal(false);
     setShortlistLoading(true);
     try {
       const res = await competitionService.submitShortlisting({
@@ -149,6 +149,7 @@ export const CompetitionControlPage: React.FC = () => {
         qualifiedTeamIds: Array.from(selectedTeamIds),
       });
       setShowShortlistModal(false);
+      setShortlistStep('SELECT');
       await refetchState();
       await refetchLogs();
       setSuccessMsg(`Successfully finalized shortlist for Round ${targetRound}: ${res.qualifiedCount} teams qualified!`);
@@ -891,254 +892,310 @@ export const CompetitionControlPage: React.FC = () => {
       {showShortlistModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-4xl bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[92vh]">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between pb-4 border-b border-slate-200">
-              <div>
-                <h3 className="text-lg font-bold text-emerald-950 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-emerald-600" />
-                  <span>
-                    Shortlist Teams for Round {targetRound}: {targetRound === 2 ? 'Bug Hunt Arena' : 'Final Boss Coding'}
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  <strong>Administrator Selection Mode:</strong> Check the boxes next to the teams you wish to qualify. Unselected teams will be marked ineligible for Round {targetRound}.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowShortlistModal(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Filter & Search Toolbar */}
-            <div className="py-3.5 space-y-3 border-b border-slate-100">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="relative w-full sm:w-64">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Search by team or code..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white transition"
-                  />
+            {shortlistStep === 'SELECT' ? (
+              <>
+                {/* Modal Header */}
+                <div className="flex items-start justify-between pb-4 border-b border-slate-200">
+                  <div>
+                    <h3 className="text-lg font-bold text-emerald-950 flex items-center gap-2">
+                      <Users className="w-5 h-5 text-emerald-600" />
+                      <span>
+                        Shortlist Teams for Round {targetRound}: {targetRound === 2 ? 'Bug Hunt Arena' : 'Final Boss Coding'}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      <strong>Administrator Selection Mode:</strong> Check the boxes next to the teams you wish to qualify. Unselected teams will be marked ineligible for Round {targetRound}.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowShortlistModal(false)}
+                    className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+                  >
+                    ✕
+                  </button>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <select
-                    value={statusFilter}
-                    onChange={(e: any) => setStatusFilter(e.target.value)}
-                    className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 bg-white"
-                  >
-                    <option value="ALL">All Submissions</option>
-                    <option value="SUBMITTED">Submitted</option>
-                    <option value="IN_PROGRESS">In Progress</option>
-                    <option value="NOT_STARTED">Not Started</option>
-                  </select>
+                {/* Filter & Search Toolbar */}
+                <div className="py-3.5 space-y-3 border-b border-slate-100">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="relative w-full sm:w-64">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        placeholder="Search by team or code..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white transition"
+                      />
+                    </div>
 
-                  <select
-                    value={sortBy}
-                    onChange={(e: any) => setSortBy(e.target.value)}
-                    className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 bg-white"
-                  >
-                    <option value="RANK">Sort: Highest Score</option>
-                    <option value="SCORE_ASC">Sort: Lowest Score</option>
-                    <option value="NAME_ASC">Sort: Team Name (A-Z)</option>
-                  </select>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <select
+                        value={statusFilter}
+                        onChange={(e: any) => setStatusFilter(e.target.value)}
+                        className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 bg-white"
+                      >
+                        <option value="ALL">All Submissions</option>
+                        <option value="SUBMITTED">Submitted</option>
+                        <option value="IN_PROGRESS">In Progress</option>
+                        <option value="NOT_STARTED">Not Started</option>
+                      </select>
+
+                      <select
+                        value={sortBy}
+                        onChange={(e: any) => setSortBy(e.target.value)}
+                        className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 bg-white"
+                      >
+                        <option value="RANK">Sort: Highest Score</option>
+                        <option value="SCORE_ASC">Sort: Lowest Score</option>
+                        <option value="NAME_ASC">Sort: Team Name (A-Z)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Quick Select Buttons & Counters */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-600">Quick Helpers:</span>
+                      <button
+                        onClick={() => handleSelectAllFiltered(filteredCandidates.map((t) => t.teamId))}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-xs transition"
+                      >
+                        Select All Filtered
+                      </button>
+                      <button
+                        onClick={() => handleDeselectAllFiltered(filteredCandidates.map((t) => t.teamId))}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-xs transition"
+                      >
+                        Deselect All
+                      </button>
+                      {targetRound === 2 ? (
+                        <button
+                          onClick={() => handleAutoSelectTop(0.5)}
+                          className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition"
+                        >
+                          Top 50% by Score
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleAutoSelectTop(6)}
+                          className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition"
+                        >
+                          Top 6 Finalists
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="font-mono font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
+                      {selectedTeamIds.size} of {candidateTeams.length} Teams Selected
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              {/* Quick Select Buttons & Counters */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-600">Quick Helpers:</span>
-                  <button
-                    onClick={() => handleSelectAllFiltered(filteredCandidates.map((t) => t.teamId))}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-xs transition"
-                  >
-                    Select All Filtered
-                  </button>
-                  <button
-                    onClick={() => handleDeselectAllFiltered(filteredCandidates.map((t) => t.teamId))}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-xs transition"
-                  >
-                    Deselect All
-                  </button>
-                  {targetRound === 2 ? (
-                    <button
-                      onClick={() => handleAutoSelectTop(0.5)}
-                      className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition"
-                    >
-                      Top 50% by Score
-                    </button>
+                {/* Candidate Teams Table */}
+                <div className="flex-1 overflow-y-auto py-2">
+                  {shortlistLoading ? (
+                    <div className="py-16 text-center text-xs text-slate-400">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
+                      <span>Loading candidate teams...</span>
+                    </div>
+                  ) : filteredCandidates.length === 0 ? (
+                    <div className="py-16 text-center text-xs text-slate-400">
+                      No candidate teams matched the filter.
+                    </div>
                   ) : (
-                    <button
-                      onClick={() => handleAutoSelectTop(6)}
-                      className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition"
-                    >
-                      Top 6 Finalists
-                    </button>
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="text-[10px] uppercase font-mono text-slate-500 border-b border-slate-200 sticky top-0 bg-white shadow-2xs">
+                        <tr>
+                          <th className="py-2.5 px-3">Qualify</th>
+                          <th className="py-2.5 px-3">Rank & Code</th>
+                          <th className="py-2.5 px-3">Team & Institution</th>
+                          <th className="py-2.5 px-3">Contestants</th>
+                          <th className="py-2.5 px-3">Submission</th>
+                          <th className="py-2.5 px-3 text-right">Score</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredCandidates.map((team) => {
+                          const isSelected = selectedTeamIds.has(team.teamId);
+                          return (
+                            <tr
+                              key={team.teamId}
+                              onClick={() => {
+                                const next = new Set(selectedTeamIds);
+                                if (isSelected) next.delete(team.teamId);
+                                else next.add(team.teamId);
+                                setSelectedTeamIds(next);
+                              }}
+                              className={`cursor-pointer transition ${
+                                isSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : 'hover:bg-slate-50'
+                              }`}
+                            >
+                              <td className="py-3 px-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}} // handled by row click
+                                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                              </td>
+                              <td className="py-3 px-3 font-mono font-bold text-emerald-900">
+                                #{team.rank} {team.teamCode}
+                              </td>
+                              <td className="py-3 px-3">
+                                <div className="font-bold text-slate-900">{team.teamName}</div>
+                                <div className="text-[10px] text-slate-500">{team.institution || '—'}</div>
+                              </td>
+                              <td className="py-3 px-3 text-[11px] text-slate-600">
+                                {team.participants.map((p) => p.fullName).join(', ') || '—'}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                                    team.participationStatus === 'SUBMITTED'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : team.participationStatus === 'IN_PROGRESS'
+                                      ? 'bg-sky-100 text-sky-800'
+                                      : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {team.participationStatus}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-800 text-sm">
+                                {team.score} pts
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   )}
                 </div>
 
-                <div className="font-mono font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
-                  {selectedTeamIds.size} of {candidateTeams.length} Teams Selected
-                </div>
-              </div>
-            </div>
+                {/* Modal Footer */}
+                <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">
+                    {selectedTeamIds.size} teams selected for Round {targetRound}.
+                  </span>
 
-            {/* Candidate Teams Table */}
-            <div className="flex-1 overflow-y-auto py-2">
-              {shortlistLoading ? (
-                <div className="py-16 text-center text-xs text-slate-400">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
-                  <span>Loading candidate teams...</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowShortlistModal(false)}
+                      className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      onClick={() => setShortlistStep('CONFIRM')}
+                      disabled={shortlistLoading || selectedTeamIds.size === 0}
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Review & Finalize Shortlist ({selectedTeamIds.size})</span>
+                    </button>
+                  </div>
                 </div>
-              ) : filteredCandidates.length === 0 ? (
-                <div className="py-16 text-center text-xs text-slate-400">
-                  No candidate teams matched the filter.
+              </>
+            ) : (
+              /* Confirmation Step */
+              <div className="flex flex-col h-full space-y-4">
+                <div className="flex items-start justify-between pb-4 border-b border-slate-200">
+                  <div>
+                    <h3 className="text-lg font-bold text-emerald-950 flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                      <span>Review & Confirm Round {targetRound} Shortlist</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Verify qualified team selections below before committing progression.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowShortlistModal(false)}
+                    className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+                  >
+                    ✕
+                  </button>
                 </div>
-              ) : (
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="text-[10px] uppercase font-mono text-slate-500 border-b border-slate-200 sticky top-0 bg-white shadow-2xs">
-                    <tr>
-                      <th className="py-2.5 px-3">Qualify</th>
-                      <th className="py-2.5 px-3">Rank & Code</th>
-                      <th className="py-2.5 px-3">Team & Institution</th>
-                      <th className="py-2.5 px-3">Contestants</th>
-                      <th className="py-2.5 px-3">Submission</th>
-                      <th className="py-2.5 px-3 text-right">Score</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredCandidates.map((team) => {
-                      const isSelected = selectedTeamIds.has(team.teamId);
-                      return (
-                        <tr
+
+                {/* Summary Metrics */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
+                    <div className="text-[10px] font-mono uppercase text-emerald-700 font-bold">Qualifying Teams</div>
+                    <div className="text-2xl font-black text-emerald-900 mt-0.5">{selectedTeamIds.size}</div>
+                    <div className="text-[10px] text-emerald-600 mt-0.5">Will be marked ELIGIBLE</div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200">
+                    <div className="text-[10px] font-mono uppercase text-rose-700 font-bold">Eliminated Teams</div>
+                    <div className="text-2xl font-black text-rose-900 mt-0.5">{candidateTeams.length - selectedTeamIds.size}</div>
+                    <div className="text-[10px] text-rose-600 mt-0.5">Will be marked INELIGIBLE</div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <div className="text-[10px] font-mono uppercase text-slate-600 font-bold">Total Candidates</div>
+                    <div className="text-2xl font-black text-slate-900 mt-0.5">{candidateTeams.length}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Evaluated from prior round</div>
+                  </div>
+                </div>
+
+                {/* Qualified Teams Review List */}
+                <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide block">
+                    Qualified Teams ({selectedTeamIds.size}):
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {candidateTeams
+                      .filter((t) => selectedTeamIds.has(t.teamId))
+                      .sort((a, b) => b.score - a.score)
+                      .map((team, idx) => (
+                        <div
                           key={team.teamId}
-                          onClick={() => {
-                            const next = new Set(selectedTeamIds);
-                            if (isSelected) next.delete(team.teamId);
-                            else next.add(team.teamId);
-                            setSelectedTeamIds(next);
-                          }}
-                          className={`cursor-pointer transition ${
-                            isSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : 'hover:bg-slate-50'
-                          }`}
+                          className="p-2.5 rounded-lg bg-white border border-emerald-200 shadow-2xs flex items-center justify-between text-xs"
                         >
-                          <td className="py-3 px-3">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {}} // handled by row click
-                              className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                            />
-                          </td>
-                          <td className="py-3 px-3 font-mono font-bold text-emerald-900">
-                            #{team.rank} {team.teamCode}
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="font-bold text-slate-900">{team.teamName}</div>
-                            <div className="text-[10px] text-slate-500">{team.institution || '—'}</div>
-                          </td>
-                          <td className="py-3 px-3 text-[11px] text-slate-600">
-                            {team.participants.map((p) => p.fullName).join(', ') || '—'}
-                          </td>
-                          <td className="py-3 px-3">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
-                                team.participationStatus === 'SUBMITTED'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : team.participationStatus === 'IN_PROGRESS'
-                                  ? 'bg-sky-100 text-sky-800'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {team.participationStatus}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-800 text-sm">
+                          <div className="truncate pr-2">
+                            <div className="font-bold text-slate-900 truncate">
+                              <span className="text-emerald-700 font-mono font-bold mr-1">#{idx + 1}</span>
+                              {team.teamName}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              {team.teamCode} • {team.institution || 'No Institution'}
+                            </div>
+                          </div>
+                          <div className="text-right font-mono font-bold text-emerald-800 shrink-0">
                             {team.score} pts
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
 
-            {/* Modal Footer */}
-            <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-xs text-slate-500">
-                {selectedTeamIds.size} teams will be unlocked for Round {targetRound}.
-              </span>
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                  <strong>Notice:</strong> Confirming will mark {selectedTeamIds.size} teams as ELIGIBLE for Round {targetRound} and update competition state. This modal will automatically close and refresh the control dashboard.
+                </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowShortlistModal(false)}
-                  className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition"
-                >
-                  Cancel
-                </button>
+                {/* Footer Buttons */}
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                  <button
+                    onClick={() => setShortlistStep('SELECT')}
+                    disabled={shortlistLoading}
+                    className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition"
+                  >
+                    ← Back to Selection
+                  </button>
 
-                <button
-                  onClick={() => setShowConfirmModal(true)}
-                  disabled={shortlistLoading || selectedTeamIds.size === 0}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Review & Finalize Shortlist ({selectedTeamIds.size})</span>
-                </button>
+                  <button
+                    onClick={handleCommitShortlist}
+                    disabled={shortlistLoading || selectedTeamIds.size === 0}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{shortlistLoading ? 'Finalizing Progression...' : `Confirm & Unlock Round ${targetRound}`}</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Dialog before Finalizing Shortlist */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-emerald-950 flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-emerald-600" />
-              <span>Confirm Shortlist Finalization</span>
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              You are about to finalize progression for <strong>Round {targetRound}</strong>:
-            </p>
-
-            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs space-y-1">
-              <div className="flex justify-between font-bold text-emerald-950">
-                <span>Qualifying Teams:</span>
-                <span className="font-mono">{selectedTeamIds.size}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Eliminated / Ineligible:</span>
-                <span className="font-mono">{candidateTeams.length - selectedTeamIds.size}</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-500">
-              This action will mark the selected teams as <strong>ELIGIBLE</strong> for Round {targetRound} and unlock the start orchestrator. You can re-open this modal to adjust selections if needed.
-            </p>
-
-            <div className="pt-2 flex justify-end gap-2">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                className="px-3.5 py-1.5 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleCommitShortlist}
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs"
-              >
-                Confirm & Unlock Round {targetRound}
-              </button>
-            </div>
+            )}
           </div>
         </div>
       )}
