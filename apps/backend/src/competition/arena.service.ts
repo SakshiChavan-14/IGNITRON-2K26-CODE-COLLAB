@@ -130,16 +130,23 @@ export class ArenaService {
       }
     }
 
+    let remainingSeconds = round.durationMinutes * 60;
+    if (isRoundCurrent && state?.deadlineAt && !state.isPaused) {
+      const now = new Date();
+      remainingSeconds = Math.max(0, Math.floor((state.deadlineAt.getTime() - now.getTime()) / 1000));
+    } else if (isRoundCurrent && state?.remainingDurationSeconds !== null && state?.remainingDurationSeconds !== undefined) {
+      remainingSeconds = state.remainingDurationSeconds;
+    }
+
     return {
       round,
       progress,
       state,
       isRoundActive,
       isPaused: Boolean(state?.isPaused),
-      remainingSeconds:
-        isRoundCurrent && state?.remainingDurationSeconds !== null
-          ? state?.remainingDurationSeconds ?? 0
-          : 0,
+      remainingSeconds,
+      durationMinutes: round.durationMinutes,
+      deadlineAt: state?.deadlineAt ? state.deadlineAt.toISOString() : null,
     };
   }
 
@@ -189,8 +196,11 @@ export class ArenaService {
       };
     }
 
-    let remainingSeconds = 30 * 60;
-    if (state?.currentRoundNumber === 1 && state.remainingDurationSeconds !== null) {
+    let remainingSeconds = round.durationMinutes * 60;
+    if (state?.currentRoundNumber === 1 && state.deadlineAt && !state.isPaused) {
+      const now = new Date();
+      remainingSeconds = Math.max(0, Math.floor((state.deadlineAt.getTime() - now.getTime()) / 1000));
+    } else if (state?.currentRoundNumber === 1 && state.remainingDurationSeconds !== null && state?.remainingDurationSeconds !== undefined) {
       remainingSeconds = state.remainingDurationSeconds;
     }
 
@@ -198,6 +208,7 @@ export class ArenaService {
       roundNumber: 1,
       durationMinutes: round.durationMinutes,
       remainingSeconds,
+      deadlineAt: state?.deadlineAt ? state.deadlineAt.toISOString() : null,
       isPaused: Boolean(state?.isPaused),
       isSubmitted: progress.participationStatus === 'SUBMITTED',
       questions,

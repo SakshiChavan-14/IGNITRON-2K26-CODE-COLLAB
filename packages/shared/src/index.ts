@@ -985,6 +985,7 @@ export interface McqArenaStateDto {
   roundNumber: 1;
   durationMinutes: number;
   remainingSeconds: number;
+  deadlineAt?: string | null;
   isPaused: boolean;
   isSubmitted: boolean;
   questions: SanitizedQuestionDto[];
