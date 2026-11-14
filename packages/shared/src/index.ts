@@ -431,6 +431,15 @@ export interface RoundSummaryDto {
   isShortlistFinalized: boolean;
 }
 
+export interface SynchronizedCountdownDto {
+  active: boolean;
+  roundNumber: number;
+  startedAt: string;
+  endsAt: string;
+  remainingSeconds: number;
+  durationSeconds: number;
+}
+
 export interface CompetitionStateDto {
   id: string;
   status: CompetitionStatus;
@@ -449,6 +458,9 @@ export interface CompetitionStateDto {
   completedTeamsCount: number;
   validTransitions: string[];
   rounds?: RoundSummaryDto[];
+  announcedRoundNumber?: number | null;
+  announcedAt?: string | null;
+  countdown?: SynchronizedCountdownDto | null;
 }
 
 export type RoundControlAction =
@@ -461,12 +473,32 @@ export type RoundControlAction =
   | 'START_ROUND_2'
   | 'START_ROUND_3'
   | 'COMPLETE_COMPETITION'
-  | 'RESET_COMPETITION';
+  | 'RESET_COMPETITION'
+  | 'ANNOUNCE_ROUND'
+  | 'START_COUNTDOWN'
+  | 'CANCEL_COUNTDOWN';
 
 export interface RoundControlDto {
   action: RoundControlAction;
   notes?: string;
   resetType?: 'DEMO_ONLY' | 'FULL_RESET';
+  countdownDurationSeconds?: number;
+  roundNumber?: number;
+}
+
+export interface UpdateRoundDurationDto {
+  roundNumber: number;
+  durationMinutes: number;
+  confirmLiveAdjustment?: boolean;
+}
+
+export interface AnnounceUpcomingRoundDto {
+  roundNumber: number;
+}
+
+export interface StartSynchronizedCountdownDto {
+  roundNumber: number;
+  durationSeconds?: number;
 }
 
 export interface ShortlistingTeamItem {

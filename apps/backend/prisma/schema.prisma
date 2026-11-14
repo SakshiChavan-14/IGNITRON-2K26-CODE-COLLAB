@@ -337,6 +337,9 @@ model CompetitionState {
   pausedAt                 DateTime?         @map("paused_at")
   remainingDurationSeconds  Int?              @map("remaining_duration_seconds")
   totalDurationSeconds     Int?              @map("total_duration_seconds")
+  countdownEndsAt          DateTime?         @map("countdown_ends_at")
+  countdownSeconds         Int?              @default(5) @map("countdown_seconds")
+  preRoundAnnouncedRound   Int?              @map("pre_round_announced_round")
   updatedAt                DateTime          @updatedAt @map("updated_at")
 
   @@map("competition_state")
