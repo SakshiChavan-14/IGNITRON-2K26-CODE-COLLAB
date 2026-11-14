@@ -594,4 +594,74 @@ export class AdminService {
       sessionsRevoked: updated.count,
     };
   }
+
+  /**
+   * Permanently delete a team and cleanly cascade all dependent records
+   */
+  async deleteTeam(id: string, adminId: string) {
+    const team = await this.prisma.team.findUnique({
+      where: { id },
+      include: { participants: true },
+    });
+
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${id} not found`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Delete evaluations for submissions of this team
+      const submissions = await tx.submission.findMany({
+        where: { teamId: id },
+        select: { id: true },
+      });
+      const subIds = submissions.map((s) => s.id);
+      if (subIds.length > 0) {
+        await tx.evaluation.deleteMany({
+          where: { submissionId: { in: subIds } },
+        });
+      }
+
+      // 2. Delete submissions
+      await tx.submission.deleteMany({ where: { teamId: id } });
+
+      // 3. Delete workspace drafts
+      await tx.workspaceDraft.deleteMany({ where: { teamId: id } });
+
+      // 4. Delete team MCQ answers
+      await tx.teamMcqAnswer.deleteMany({ where: { teamId: id } });
+
+      // 5. Delete team round progress
+      await tx.teamRoundProgress.deleteMany({ where: { teamId: id } });
+
+      // 6. Delete team sessions
+      await tx.teamSession.deleteMany({ where: { teamId: id } });
+
+      // 7. Delete participants
+      await tx.participant.deleteMany({ where: { teamId: id } });
+
+      // 8. Delete team
+      await tx.team.delete({ where: { id } });
+
+      // 9. Audit log
+      await tx.activityLog.create({
+        data: {
+          actorType: 'ADMIN',
+          actorId: adminId,
+          action: 'TEAM_DELETED',
+          description: `Admin permanently deleted team "${team.teamName}" (${team.teamCode})`,
+          metadata: {
+            teamId: team.id,
+            teamCode: team.teamCode,
+            teamName: team.teamName,
+            institution: team.institution,
+          },
+        },
+      });
+    });
+
+    return {
+      message: `Team "${team.teamName}" (${team.teamCode}) permanently deleted`,
+      deletedTeamCode: team.teamCode,
+    };
+  }
 }

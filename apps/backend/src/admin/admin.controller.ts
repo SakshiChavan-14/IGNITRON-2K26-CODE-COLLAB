@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -88,6 +89,15 @@ export class AdminController {
     @Body() dto: ToggleTeamStatusDto,
   ) {
     const result = await this.adminService.toggleTeamStatus(id, dto, user.id);
+    return { success: true, ...result };
+  }
+
+  @Delete('teams/:id')
+  async deleteTeam(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const result = await this.adminService.deleteTeam(id, user.id);
     return { success: true, ...result };
   }
 
