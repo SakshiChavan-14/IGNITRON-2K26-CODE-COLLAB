@@ -82,18 +82,29 @@ export class CodeExecutionService {
     });
 
     let activeRoundId: string | null = null;
-    const isDevelopmentMode = process.env.NODE_ENV !== 'production';
 
-    if (!isDevOverride && !(isDevelopmentMode && dto.isTestRun)) {
+    if (!isDevOverride) {
       if (!competitionState) {
         throw new ForbiddenException('Competition state has not been initialized.');
+      }
+
+      const now = new Date();
+
+      // Check if synchronized countdown is in progress
+      if (
+        competitionState.countdownEndsAt &&
+        competitionState.countdownEndsAt.getTime() > now.getTime()
+      ) {
+        throw new ForbiddenException(
+          'Round launch countdown is in progress. Code execution is locked until the round officially starts.',
+        );
       }
 
       // Check if competition is in an active round
       const activeStates = ['ROUND_1_ACTIVE', 'ROUND_2_ACTIVE', 'ROUND_3_ACTIVE'];
       if (!activeStates.includes(competitionState.status)) {
         throw new ForbiddenException(
-          `Code execution is blocked: competition is currently in state "${competitionState.status}".`,
+          `Code execution is blocked: competition is currently in state "${competitionState.status}". Code execution is only permitted during an active round.`,
         );
       }
 
@@ -103,14 +114,13 @@ export class CodeExecutionService {
       }
 
       // Check round deadline
-      const now = new Date();
       if (competitionState.deadlineAt && competitionState.deadlineAt.getTime() < now.getTime()) {
         throw new ForbiddenException(
           'Round deadline has expired. Code execution is no longer accepted for this round.',
         );
       }
 
-      // Check team eligibility in active round
+      // Check team eligibility and submission status in active round
       if (competitionState.currentRoundNumber) {
         const round = await this.prisma.competitionRound.findUnique({
           where: { roundNumber: competitionState.currentRoundNumber },
@@ -135,6 +145,13 @@ export class CodeExecutionService {
           if (!isEligible) {
             throw new ForbiddenException(
               `Team "${teamUser.teamCode}" is not eligible to participate in Round ${competitionState.currentRoundNumber}.`,
+            );
+          }
+
+          // Lock code execution if round is already submitted
+          if (progress?.participationStatus === 'SUBMITTED') {
+            throw new ForbiddenException(
+              `Round ${competitionState.currentRoundNumber} has already been submitted by your team. Code execution is locked.`,
             );
           }
         }

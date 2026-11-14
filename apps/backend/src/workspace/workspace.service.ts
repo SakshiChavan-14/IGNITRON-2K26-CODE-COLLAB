@@ -28,6 +28,9 @@ export class WorkspaceService {
   ): Promise<WorkspaceDraftDto> {
     const round = await this.resolveTargetRound(requestedRoundNumber);
 
+    // Verify team eligibility and round active / submission state
+    await this.validateCompetitionStateAndEligibility(teamUser, round.roundNumber, 'READ');
+
     const draft = await this.prisma.workspaceDraft.findUnique({
       where: {
         teamId_roundId_caseNumber: {
@@ -202,53 +205,83 @@ export class WorkspaceService {
   private async validateCompetitionStateAndEligibility(
     teamUser: AuthTeamUser,
     roundNumber: number,
+    action: 'READ' | 'WRITE' = 'WRITE',
   ): Promise<void> {
     const state = await this.prisma.competitionState.findUnique({
       where: { id: 'global' },
     });
 
-    if (!state) return;
+    if (!state) {
+      throw new ForbiddenException('Competition state has not been initialized.');
+    }
 
-    // Only strictly block if competition is officially in an active or evaluation round
+    const now = new Date();
+    const isCountdownActive = Boolean(
+      state.countdownEndsAt && state.countdownEndsAt.getTime() > now.getTime(),
+    );
+
     const isRoundActive =
-      (roundNumber === 1 && state.status === 'ROUND_1_ACTIVE') ||
-      (roundNumber === 2 && state.status === 'ROUND_2_ACTIVE') ||
-      (roundNumber === 3 && state.status === 'ROUND_3_ACTIVE');
+      !isCountdownActive &&
+      ((roundNumber === 1 && state.status === 'ROUND_1_ACTIVE') ||
+        (roundNumber === 2 && state.status === 'ROUND_2_ACTIVE') ||
+        (roundNumber === 3 && state.status === 'ROUND_3_ACTIVE'));
 
-    if (isRoundActive) {
+    // Check round definition
+    const round = await this.prisma.competitionRound.findUnique({
+      where: { roundNumber },
+    });
+    if (!round) {
+      throw new NotFoundException(`Round ${roundNumber} definition not found in database.`);
+    }
+
+    // Check eligibility
+    const progress = await this.prisma.teamRoundProgress.findUnique({
+      where: {
+        teamId_roundId: {
+          teamId: teamUser.id,
+          roundId: round.id,
+        },
+      },
+    });
+
+    // Round 1 active teams are eligible by default
+    const isEligible =
+      progress?.eligibilityStatus === 'ELIGIBLE' ||
+      (roundNumber === 1 && progress === null);
+
+    if (!isEligible) {
+      throw new ForbiddenException(
+        `Team "${teamUser.teamCode}" is not eligible to participate in Round ${roundNumber}.`,
+      );
+    }
+
+    const isSubmitted = progress?.participationStatus === 'SUBMITTED';
+
+    if (action === 'READ') {
+      if (!isRoundActive && !isSubmitted) {
+        throw new ForbiddenException(
+          `The competition workspace will become available when Round ${roundNumber} begins.`,
+        );
+      }
+    } else {
+      if (isSubmitted) {
+        throw new ForbiddenException(
+          `Round ${roundNumber} has already been submitted by your team. Workspace is locked.`,
+        );
+      }
+
+      if (!isRoundActive) {
+        throw new ForbiddenException(
+          `Round ${roundNumber} is not currently active. Workspace changes cannot be saved.`,
+        );
+      }
+
       if (state.isPaused) {
         throw new ForbiddenException('Competition is paused. Workspace changes are temporarily locked.');
       }
 
-      const now = new Date();
       if (state.deadlineAt && state.deadlineAt.getTime() < now.getTime()) {
         throw new ForbiddenException('Round deadline has expired. Workspace drafts are now read-only.');
-      }
-
-      // Check eligibility
-      const round = await this.prisma.competitionRound.findUnique({
-        where: { roundNumber },
-      });
-      if (round) {
-        const progress = await this.prisma.teamRoundProgress.findUnique({
-          where: {
-            teamId_roundId: {
-              teamId: teamUser.id,
-              roundId: round.id,
-            },
-          },
-        });
-
-        // Round 1 active teams are eligible by default
-        const isEligible =
-          progress?.eligibilityStatus === 'ELIGIBLE' ||
-          (roundNumber === 1 && progress === null);
-
-        if (!isEligible) {
-          throw new ForbiddenException(
-            `Team "${teamUser.teamCode}" is not eligible to participate in Round ${roundNumber}.`,
-          );
-        }
       }
     }
   }
