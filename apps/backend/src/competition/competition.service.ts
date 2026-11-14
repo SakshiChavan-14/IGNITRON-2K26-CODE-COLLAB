@@ -21,6 +21,7 @@ import {
   CompetitionRoundCardItem,
   RoundSummaryDto,
   ParticipantRoundStatus,
+  SynchronizedCountdownDto,
 } from '@ignitron/shared';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -66,7 +67,7 @@ export class CompetitionService implements OnModuleInit {
    * Returns authoritative global state with server timer and statistics
    */
   async getCompetitionState(): Promise<CompetitionStateDto> {
-    const state = await this.getOrCreateGlobalState();
+    let state = await this.getOrCreateGlobalState();
     const now = new Date();
 
     let currentRoundName: string | null = null;
@@ -143,6 +144,33 @@ export class CompetitionService implements OnModuleInit {
       );
     }
 
+    // Server-authoritative countdown check & auto-launch
+    let countdownDto: SynchronizedCountdownDto | null = null;
+    if (state.countdownEndsAt) {
+      if (state.countdownEndsAt.getTime() > now.getTime()) {
+        const remainingMs = state.countdownEndsAt.getTime() - now.getTime();
+        const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+        const targetRoundNumber = state.preRoundAnnouncedRound || 1;
+
+        countdownDto = {
+          active: true,
+          roundNumber: targetRoundNumber,
+          startedAt: new Date(state.countdownEndsAt.getTime() - (state.countdownSeconds || 5) * 1000).toISOString(),
+          endsAt: state.countdownEndsAt.toISOString(),
+          remainingSeconds,
+          durationSeconds: state.countdownSeconds || 5,
+        };
+      } else {
+        // Countdown expired! Trigger synchronized live round launch
+        const targetRound = state.preRoundAnnouncedRound || (state.status === 'STANDBY' ? 1 : state.status === 'ROUND_1_EVALUATION' ? 2 : 3);
+        await this.launchRoundFromCountdown(targetRound, state.countdownEndsAt);
+        const refreshedState = await this.prisma.competitionState.findUnique({ where: { id: 'global' } });
+        if (refreshedState) {
+          state = refreshedState;
+        }
+      }
+    }
+
     return {
       id: state.id,
       status: state.status as CompetitionStatus,
@@ -161,6 +189,9 @@ export class CompetitionService implements OnModuleInit {
       completedTeamsCount,
       validTransitions,
       rounds: roundsSummary,
+      announcedRoundNumber: state.preRoundAnnouncedRound,
+      announcedAt: state.updatedAt ? state.updatedAt.toISOString() : null,
+      countdown: countdownDto,
     };
   }
 
@@ -170,19 +201,19 @@ export class CompetitionService implements OnModuleInit {
   private getValidTransitions(status: string, isPaused: boolean): string[] {
     switch (status) {
       case 'STANDBY':
-        return ['START_ROUND_1'];
+        return ['START_ROUND_1', 'ANNOUNCE_ROUND', 'START_COUNTDOWN', 'CANCEL_COUNTDOWN'];
       case 'ROUND_1_ACTIVE':
         return isPaused
           ? ['RESUME_ROUND', 'END_ROUND']
           : ['PAUSE_ROUND', 'END_ROUND'];
       case 'ROUND_1_EVALUATION':
-        return ['START_ROUND_2'];
+        return ['START_ROUND_2', 'ANNOUNCE_ROUND', 'START_COUNTDOWN', 'CANCEL_COUNTDOWN'];
       case 'ROUND_2_ACTIVE':
         return isPaused
           ? ['RESUME_ROUND', 'END_ROUND']
           : ['PAUSE_ROUND', 'END_ROUND'];
       case 'ROUND_2_EVALUATION':
-        return ['START_ROUND_3'];
+        return ['START_ROUND_3', 'ANNOUNCE_ROUND', 'START_COUNTDOWN', 'CANCEL_COUNTDOWN'];
       case 'ROUND_3_ACTIVE':
         return isPaused
           ? ['RESUME_ROUND', 'END_ROUND']
@@ -214,6 +245,131 @@ export class CompetitionService implements OnModuleInit {
       }
 
       switch (dto.action) {
+        case 'ANNOUNCE_ROUND': {
+          const targetRoundNumber = dto.roundNumber || (currentState.status === 'STANDBY' ? 1 : currentState.status === 'ROUND_1_EVALUATION' ? 2 : 3);
+          const round = await tx.competitionRound.findUnique({
+            where: { roundNumber: targetRoundNumber },
+          });
+          if (!round) throw new NotFoundException(`Round ${targetRoundNumber} definition not found`);
+
+          if (targetRoundNumber === 2 && currentState.status !== 'ROUND_1_EVALUATION') {
+            throw new BadRequestException('Cannot announce Round 2 until Round 1 evaluation has been reached.');
+          }
+          if (targetRoundNumber === 3 && currentState.status !== 'ROUND_2_EVALUATION') {
+            throw new BadRequestException('Cannot announce Round 3 until Round 2 evaluation has been reached.');
+          }
+
+          await tx.competitionState.update({
+            where: { id: 'global' },
+            data: {
+              preRoundAnnouncedRound: targetRoundNumber,
+              countdownEndsAt: null,
+            },
+          });
+
+          await tx.announcement.create({
+            data: {
+              title: `GET READY! Round ${targetRoundNumber}: ${round.name}`,
+              message: `GET READY!\nRound ${targetRoundNumber}: ${round.name} is about to begin.\nPlease prepare your team.`,
+              priority: 'URGENT',
+              isPublished: true,
+              publishedAt: now,
+              authorId: (await tx.adminAccount.findUnique({ where: { id: adminId } })) ? adminId : null,
+            },
+          });
+
+          await tx.activityLog.create({
+            data: {
+              actorType: 'ADMIN',
+              actorId: adminId,
+              action: 'ANNOUNCE_ROUND',
+              description: `Admin announced upcoming Round ${targetRoundNumber}: ${round.name}.`,
+              metadata: { roundNumber: targetRoundNumber },
+            },
+          });
+
+          return { message: `Round ${targetRoundNumber} announced successfully to eligible teams.` };
+        }
+
+        case 'START_COUNTDOWN': {
+          const targetRoundNumber = dto.roundNumber || currentState.preRoundAnnouncedRound || (currentState.status === 'STANDBY' ? 1 : currentState.status === 'ROUND_1_EVALUATION' ? 2 : 3);
+          const round = await tx.competitionRound.findUnique({
+            where: { roundNumber: targetRoundNumber },
+          });
+          if (!round) throw new NotFoundException(`Round ${targetRoundNumber} definition not found`);
+
+          if (targetRoundNumber === 2) {
+            const eligibleR2Count = await tx.teamRoundProgress.count({
+              where: { roundId: round.id, eligibilityStatus: 'ELIGIBLE' },
+            });
+            if (eligibleR2Count === 0) {
+              throw new BadRequestException('Cannot start Round 2 countdown: No teams shortlisted and marked ELIGIBLE.');
+            }
+          } else if (targetRoundNumber === 3) {
+            const eligibleR3Count = await tx.teamRoundProgress.count({
+              where: { roundId: round.id, eligibilityStatus: 'ELIGIBLE' },
+            });
+            if (eligibleR3Count === 0) {
+              throw new BadRequestException('Cannot start Round 3 countdown: No finalists shortlisted and marked ELIGIBLE.');
+            }
+          }
+
+          if (currentState.countdownEndsAt && currentState.countdownEndsAt.getTime() > now.getTime()) {
+            throw new BadRequestException('A synchronized countdown is already in progress.');
+          }
+
+          const countdownSec = dto.countdownDurationSeconds && [5, 10].includes(dto.countdownDurationSeconds)
+            ? dto.countdownDurationSeconds
+            : 5;
+          const endsAt = new Date(now.getTime() + countdownSec * 1000);
+
+          await tx.competitionState.update({
+            where: { id: 'global' },
+            data: {
+              countdownEndsAt: endsAt,
+              countdownSeconds: countdownSec,
+              preRoundAnnouncedRound: targetRoundNumber,
+            },
+          });
+
+          await tx.activityLog.create({
+            data: {
+              actorType: 'ADMIN',
+              actorId: adminId,
+              action: 'START_COUNTDOWN',
+              description: `Admin initiated ${countdownSec}-second synchronized countdown for Round ${targetRoundNumber}.`,
+              metadata: { roundNumber: targetRoundNumber, countdownSeconds: countdownSec, endsAt: endsAt.toISOString() },
+            },
+          });
+
+          return {
+            message: `Synchronized ${countdownSec}s countdown started for Round ${targetRoundNumber}.`,
+            countdownEndsAt: endsAt.toISOString(),
+            countdownSeconds: countdownSec,
+          };
+        }
+
+        case 'CANCEL_COUNTDOWN': {
+          await tx.competitionState.update({
+            where: { id: 'global' },
+            data: {
+              countdownEndsAt: null,
+              countdownSeconds: 5,
+            },
+          });
+
+          await tx.activityLog.create({
+            data: {
+              actorType: 'ADMIN',
+              actorId: adminId,
+              action: 'CANCEL_COUNTDOWN',
+              description: 'Admin cancelled synchronized countdown.',
+            },
+          });
+
+          return { message: 'Synchronized countdown cancelled.' };
+        }
+
         case 'START_ROUND_1': {
           if (currentState.status !== 'STANDBY') {
             throw new BadRequestException(
@@ -279,6 +435,8 @@ export class CompetitionService implements OnModuleInit {
               pausedAt: null,
               totalDurationSeconds: durationSeconds,
               remainingDurationSeconds: durationSeconds,
+              countdownEndsAt: null,
+              preRoundAnnouncedRound: null,
             },
           });
 
@@ -453,6 +611,147 @@ export class CompetitionService implements OnModuleInit {
               where: { id: currentRound.id },
               data: { status: 'COMPLETED' },
             });
+
+            // Automatic submission of unsent work for all eligible teams in this round
+            if (currentRoundNumber === 1) {
+              const eligibleR1 = await tx.teamRoundProgress.findMany({
+                where: { roundId: currentRound.id, eligibilityStatus: 'ELIGIBLE' },
+              });
+              const r1Questions = await tx.question.findMany({
+                where: { roundId: currentRound.id, type: 'MCQ' },
+                select: { id: true, correctOption: true, marks: true },
+              });
+
+              for (const prog of eligibleR1) {
+                if (prog.participationStatus !== 'SUBMITTED') {
+                  const savedAnswers = await tx.teamMcqAnswer.findMany({
+                    where: { teamId: prog.teamId },
+                  });
+                  let score = 0;
+                  for (const q of r1Questions) {
+                    const ans = savedAnswers.find((a) => a.questionId === q.id);
+                    if (ans && ans.selectedOption !== null && ans.selectedOption === q.correctOption) {
+                      score += Number(q.marks);
+                    }
+                  }
+                  await tx.submission.create({
+                    data: {
+                      teamId: prog.teamId,
+                      roundId: currentRound.id,
+                      sourceCode: JSON.stringify(savedAnswers),
+                      language: 'json',
+                      score,
+                      submissionStatus: 'EVALUATED',
+                      submittedAt: now,
+                      isTestRun: false,
+                    },
+                  });
+                  await tx.teamRoundProgress.update({
+                    where: { id: prog.id },
+                    data: {
+                      participationStatus: 'SUBMITTED',
+                      score,
+                      submittedAt: now,
+                    },
+                  });
+                }
+              }
+            } else if (currentRoundNumber === 2) {
+              const eligibleR2 = await tx.teamRoundProgress.findMany({
+                where: { roundId: currentRound.id, eligibilityStatus: 'ELIGIBLE' },
+              });
+              const r2Question = await tx.question.findFirst({
+                where: { roundId: currentRound.id },
+              });
+
+              for (const prog of eligibleR2) {
+                if (prog.participationStatus !== 'SUBMITTED') {
+                  const draft = await tx.workspaceDraft.findUnique({
+                    where: {
+                      teamId_roundId_caseNumber: {
+                        teamId: prog.teamId,
+                        roundId: currentRound.id,
+                        caseNumber: 1,
+                      },
+                    },
+                  });
+                  if (draft && draft.sourceCode.trim().length > 0) {
+                    await tx.submission.create({
+                      data: {
+                        teamId: prog.teamId,
+                        roundId: currentRound.id,
+                        questionId: r2Question?.id || null,
+                        sourceCode: draft.sourceCode,
+                        language: draft.language,
+                        submissionStatus: 'PENDING',
+                        submittedAt: now,
+                        isTestRun: false,
+                      },
+                    });
+                  }
+                  await tx.teamRoundProgress.update({
+                    where: { id: prog.id },
+                    data: {
+                      participationStatus: 'SUBMITTED',
+                      submittedAt: now,
+                    },
+                  });
+                }
+              }
+            } else if (currentRoundNumber === 3) {
+              const eligibleR3 = await tx.teamRoundProgress.findMany({
+                where: { roundId: currentRound.id, eligibilityStatus: 'ELIGIBLE' },
+              });
+              const r3Questions = await tx.question.findMany({
+                where: { roundId: currentRound.id },
+              });
+
+              for (const prog of eligibleR3) {
+                for (const cNum of [1, 2, 3]) {
+                  const q = r3Questions.find((item) => item.caseNumber === cNum);
+                  const existingSub = await tx.submission.findFirst({
+                    where: {
+                      teamId: prog.teamId,
+                      roundId: currentRound.id,
+                      questionId: q?.id,
+                      isTestRun: false,
+                    },
+                  });
+                  if (!existingSub) {
+                    const draft = await tx.workspaceDraft.findUnique({
+                      where: {
+                        teamId_roundId_caseNumber: {
+                          teamId: prog.teamId,
+                          roundId: currentRound.id,
+                          caseNumber: cNum,
+                        },
+                      },
+                    });
+                    if (draft && draft.sourceCode.trim().length > 0) {
+                      await tx.submission.create({
+                        data: {
+                          teamId: prog.teamId,
+                          roundId: currentRound.id,
+                          questionId: q?.id || null,
+                          sourceCode: draft.sourceCode,
+                          language: draft.language,
+                          submissionStatus: 'PENDING',
+                          submittedAt: now,
+                          isTestRun: false,
+                        },
+                      });
+                    }
+                  }
+                }
+                await tx.teamRoundProgress.update({
+                  where: { id: prog.id },
+                  data: {
+                    participationStatus: 'SUBMITTED',
+                    submittedAt: now,
+                  },
+                });
+              }
+            }
           }
 
           await tx.competitionState.update({
@@ -462,6 +761,8 @@ export class CompetitionService implements OnModuleInit {
               isPaused: false,
               deadlineAt: now,
               remainingDurationSeconds: 0,
+              countdownEndsAt: null,
+              preRoundAnnouncedRound: null,
             },
           });
 
@@ -470,7 +771,7 @@ export class CompetitionService implements OnModuleInit {
               actorType: 'ADMIN',
               actorId: adminId,
               action: 'ROUND_ENDED',
-              description: `Admin ended Round ${currentRoundNumber}. Entered ${nextStatus}.`,
+              description: `Admin ended Round ${currentRoundNumber}. Automatically captured latest participant drafts. Entered ${nextStatus}.`,
               metadata: {
                 endedRound: currentRoundNumber,
                 nextStatus,
@@ -480,9 +781,9 @@ export class CompetitionService implements OnModuleInit {
 
           await tx.announcement.create({
             data: {
-              title: `Round ${currentRoundNumber} Concluded`,
-              message: `Round ${currentRoundNumber} has officially ended. All arena inputs are locked and evaluation is now in progress. Results and shortlists will be announced soon.`,
-              priority: 'HIGH',
+              title: `ROUND CONCLUDED`,
+              message: `ROUND CONCLUDED\n\nYour latest work has been safely recorded.\nYour submission will now be evaluated.\nPlease return to your dashboard and wait for the results.`,
+              priority: 'URGENT',
               isPublished: true,
               publishedAt: now,
               authorId: (await tx.adminAccount.findUnique({ where: { id: adminId } })) ? adminId : null,
@@ -539,6 +840,8 @@ export class CompetitionService implements OnModuleInit {
               pausedAt: null,
               totalDurationSeconds: durationSeconds,
               remainingDurationSeconds: durationSeconds,
+              countdownEndsAt: null,
+              preRoundAnnouncedRound: null,
             },
           });
 
@@ -611,6 +914,8 @@ export class CompetitionService implements OnModuleInit {
               pausedAt: null,
               totalDurationSeconds: durationSeconds,
               remainingDurationSeconds: durationSeconds,
+              countdownEndsAt: null,
+              preRoundAnnouncedRound: null,
             },
           });
 
@@ -1539,6 +1844,158 @@ export class CompetitionService implements OnModuleInit {
       teamsCount: createdTeams.length,
       demoPassword,
     };
+  }
+
+  /**
+   * Updates round duration before launch or with explicit confirmation during live execution
+   */
+  async updateRoundDuration(
+    roundNumber: number,
+    durationMinutes: number,
+    confirmLiveAdjustment = false,
+    adminId: string,
+  ): Promise<{ success: boolean; roundNumber: number; durationMinutes: number; message: string }> {
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
+      throw new BadRequestException('Round duration must be an integer between 1 and 240 minutes.');
+    }
+
+    const round = await this.prisma.competitionRound.findUnique({
+      where: { roundNumber },
+    });
+    if (!round) {
+      throw new NotFoundException(`Round ${roundNumber} does not exist.`);
+    }
+
+    const state = await this.prisma.competitionState.findUnique({
+      where: { id: 'global' },
+    });
+
+    const isRoundActive =
+      (state?.currentRoundNumber === roundNumber && state?.status?.includes('ACTIVE')) ||
+      round.status === 'ACTIVE';
+
+    if (isRoundActive && !confirmLiveAdjustment) {
+      throw new BadRequestException(
+        `Round ${roundNumber} is currently LIVE. Live timer adjustment requires explicit confirmation.`,
+      );
+    }
+
+    const oldDuration = round.durationMinutes;
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.competitionRound.update({
+        where: { id: round.id },
+        data: { durationMinutes },
+      });
+
+      if (isRoundActive && state?.deadlineAt) {
+        const deltaSeconds = (durationMinutes - oldDuration) * 60;
+        const newDeadline = new Date(state.deadlineAt.getTime() + deltaSeconds * 1000);
+        const remainingSeconds = Math.max(0, Math.floor((newDeadline.getTime() - now.getTime()) / 1000));
+
+        await tx.competitionState.update({
+          where: { id: 'global' },
+          data: {
+            deadlineAt: newDeadline,
+            totalDurationSeconds: durationMinutes * 60,
+            remainingDurationSeconds: remainingSeconds,
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            actorType: 'ADMIN',
+            actorId: adminId,
+            action: 'LIVE_TIMER_ADJUSTMENT',
+            description: `Admin adjusted live timer for Round ${roundNumber} from ${oldDuration}m to ${durationMinutes}m. New deadline: ${newDeadline.toISOString()}`,
+            metadata: { roundNumber, oldDuration, newDuration: durationMinutes, deltaSeconds },
+          },
+        });
+      } else {
+        await tx.activityLog.create({
+          data: {
+            actorType: 'ADMIN',
+            actorId: adminId,
+            action: 'UPDATE_ROUND_DURATION',
+            description: `Admin changed Round ${roundNumber} duration from ${oldDuration}m to ${durationMinutes}m.`,
+            metadata: { roundNumber, oldDuration, newDuration: durationMinutes },
+          },
+        });
+      }
+    });
+
+    return {
+      success: true,
+      roundNumber,
+      durationMinutes,
+      message: `Round ${roundNumber} duration successfully updated to ${durationMinutes} minutes.`,
+    };
+  }
+
+  /**
+   * Synchronized launch triggered automatically when countdown hits zero
+   */
+  async launchRoundFromCountdown(roundNumber: number, startedAt: Date, adminId = 'system') {
+    const round = await this.prisma.competitionRound.findUnique({
+      where: { roundNumber },
+    });
+    if (!round) return;
+
+    const durationSeconds = round.durationMinutes * 60;
+    const deadline = new Date(startedAt.getTime() + durationSeconds * 1000);
+    const statusMap: Record<number, CompetitionStatus> = {
+      1: 'ROUND_1_ACTIVE',
+      2: 'ROUND_2_ACTIVE',
+      3: 'ROUND_3_ACTIVE',
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      if (roundNumber === 1) {
+        const activeTeams = await tx.team.findMany({
+          where: { isActive: true },
+          select: { id: true },
+        });
+        for (const t of activeTeams) {
+          await tx.teamRoundProgress.upsert({
+            where: { teamId_roundId: { teamId: t.id, roundId: round.id } },
+            update: { eligibilityStatus: 'ELIGIBLE', participationStatus: 'NOT_STARTED' },
+            create: { teamId: t.id, roundId: round.id, eligibilityStatus: 'ELIGIBLE', participationStatus: 'NOT_STARTED', score: 0 },
+          });
+        }
+      }
+
+      await tx.competitionRound.update({
+        where: { id: round.id },
+        data: { status: 'ACTIVE' },
+      });
+
+      await tx.competitionState.update({
+        where: { id: 'global' },
+        data: {
+          status: statusMap[roundNumber] || 'ROUND_1_ACTIVE',
+          currentRoundNumber: roundNumber,
+          isPaused: false,
+          startedAt,
+          deadlineAt: deadline,
+          pausedAt: null,
+          totalDurationSeconds: durationSeconds,
+          remainingDurationSeconds: durationSeconds,
+          countdownEndsAt: null,
+          preRoundAnnouncedRound: null,
+        },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          actorType: 'ADMIN',
+          actorId: adminId,
+          action: `ROUND_${roundNumber}_STARTED`,
+          description: `Round ${roundNumber}: ${round.name} started live automatically via synchronized countdown.`,
+          metadata: { roundNumber, durationMinutes: round.durationMinutes },
+        },
+      });
+    });
   }
 }
 

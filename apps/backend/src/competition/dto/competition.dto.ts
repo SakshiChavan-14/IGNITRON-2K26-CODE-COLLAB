@@ -23,6 +23,9 @@ export class RoundControlDto {
     'START_ROUND_3',
     'COMPLETE_COMPETITION',
     'RESET_COMPETITION',
+    'ANNOUNCE_ROUND',
+    'START_COUNTDOWN',
+    'CANCEL_COUNTDOWN',
   ], { message: 'Invalid round control action' })
   @IsNotEmpty({ message: 'Action is required' })
   action!: RoundControlAction;
@@ -34,6 +37,29 @@ export class RoundControlDto {
   @IsString()
   @IsOptional()
   resetType?: 'DEMO_ONLY' | 'FULL_RESET';
+
+  @IsInt()
+  @IsOptional()
+  roundNumber?: number;
+
+  @IsInt()
+  @IsOptional()
+  countdownDurationSeconds?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  confirmLiveAdjustment?: boolean;
+}
+
+export class UpdateRoundDurationDto {
+  @IsInt({ message: 'Duration in minutes must be an integer' })
+  @Min(1, { message: 'Duration must be at least 1 minute' })
+  @Max(240, { message: 'Duration cannot exceed 240 minutes' })
+  durationMinutes!: number;
+
+  @IsBoolean()
+  @IsOptional()
+  confirmLiveAdjustment?: boolean;
 }
 
 export class ShortlistSubmissionDto {
