@@ -49,10 +49,15 @@ export const TeamLoginPage: React.FC = () => {
       );
     } else {
       setEmailWarning(null);
+      const clean = val.trim().toUpperCase();
+      if (clean.length === 8 && clean.startsWith('IGN-')) {
+        handleLookup(clean);
+      }
     }
   };
 
   const handleLookup = async (codeToLookup?: string) => {
+    if (lookingUp) return;
     const rawCode = codeToLookup !== undefined ? codeToLookup : teamCode;
     const trimmed = rawCode.trim();
     if (!trimmed) return;
@@ -101,6 +106,12 @@ export const TeamLoginPage: React.FC = () => {
 
     if (trimmedCode.includes('@')) {
       setLoginError('Login requires your assigned Team Code (e.g. IGN-XXXX), not a participant email address.');
+      return;
+    }
+
+    // If team has not been looked up yet, perform lookup first
+    if (!teamName || participants.length === 0) {
+      await handleLookup(trimmedCode);
       return;
     }
 
@@ -216,7 +227,11 @@ export const TeamLoginPage: React.FC = () => {
                   required
                   value={teamCode}
                   onChange={handleTeamCodeChange}
-                  onBlur={() => handleLookup()}
+                  onBlur={() => {
+                    if (teamCode.trim().length >= 4 && !teamName && !lookingUp) {
+                      handleLookup();
+                    }
+                  }}
                   placeholder="e.g. IGN-4A1B"
                   className="w-full pl-9 pr-3 py-2.5 bg-[#011108]/90 border border-emerald-500/30 rounded-xl text-sm font-mono text-slate-100 placeholder-emerald-200/40 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 transition-colors shadow-inner"
                 />

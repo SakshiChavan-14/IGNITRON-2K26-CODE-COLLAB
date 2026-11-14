@@ -17,7 +17,12 @@ export class ApiError extends Error {
     const errorMsg =
       data?.error?.message ||
       data?.message ||
-      `API Error ${status}: ${statusText}`;
+      (typeof data === 'string' && data.trim().length > 0 && !data.trim().startsWith('<')
+        ? data.trim()
+        : null) ||
+      (status === 502 || status === 503 || status === 504 || status === 500
+        ? 'Backend service is currently unavailable. Please verify the backend server is running.'
+        : `Request failed with status ${status}: ${statusText}`);
     super(errorMsg);
     this.name = 'ApiError';
   }
@@ -44,9 +49,15 @@ export async function apiClient<T>(
   if (!response.ok) {
     let errorData: unknown;
     try {
-      errorData = await response.json();
+      // Read body stream exactly once as text to prevent "body stream already read"
+      const rawText = await response.text();
+      try {
+        errorData = JSON.parse(rawText);
+      } catch {
+        errorData = rawText || response.statusText;
+      }
     } catch {
-      errorData = await response.text();
+      errorData = response.statusText;
     }
     throw new ApiError(response.status, response.statusText, errorData);
   }
@@ -56,5 +67,14 @@ export async function apiClient<T>(
     return {} as T;
   }
 
-  return (await response.json()) as T;
+  // Safely parse JSON response body with single-read protection
+  const rawText = await response.text();
+  if (!rawText || !rawText.trim()) {
+    return {} as T;
+  }
+  try {
+    return JSON.parse(rawText) as T;
+  } catch {
+    return rawText as unknown as T;
+  }
 }
