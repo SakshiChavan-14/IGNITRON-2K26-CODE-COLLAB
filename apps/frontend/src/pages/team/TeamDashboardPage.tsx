@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import {
   useTeamCompetitionStatus,
   useServerTimer,
+  useCompetitionState,
+  useSynchronizedCountdown,
 } from '../../hooks/useCompetition';
 import { announcementService } from '../../services/announcement.service';
 import { competitionService } from '../../services/competition.service';
@@ -33,6 +35,8 @@ export const TeamDashboardPage: React.FC = () => {
   const navigate = useNavigate();
 
   const { data: teamStatus } = useTeamCompetitionStatus(!!user);
+  const { data: compState } = useCompetitionState();
+  const countdown = useSynchronizedCountdown(compState?.countdown);
 
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
@@ -213,13 +217,37 @@ export const TeamDashboardPage: React.FC = () => {
     },
   ];
 
-  const roundCards = teamStatus?.roundCards && teamStatus.roundCards.length > 0
-    ? teamStatus.roundCards
-    : defaultRoundCards;
+  const baseRoundCards =
+    teamStatus?.roundCards && teamStatus.roundCards.length > 0
+      ? teamStatus.roundCards
+      : defaultRoundCards;
+
+  const roundCards = baseRoundCards.map((card) => {
+    const serverRound = compState?.rounds?.find((r) => r.roundNumber === card.roundNumber);
+    return {
+      ...card,
+      durationMinutes: serverRound?.durationMinutes ?? card.durationMinutes,
+    };
+  });
 
   const participants = teamStatus?.participants || [];
   const participantA = participants[0];
   const participantB = participants[1];
+
+  // Pre-round announcement check
+  const announcedRoundNum = compState?.announcedRoundNumber;
+  const announcedRoundCard = announcedRoundNum
+    ? roundCards.find((r) => r.roundNumber === announcedRoundNum)
+    : null;
+  const isTeamEligibleForAnnounced =
+    announcedRoundNum === 1 || announcedRoundCard?.teamEligibility === 'ELIGIBLE';
+
+  // Synchronized countdown check
+  const isCountdownActive = Boolean(compState?.countdown?.active);
+  const countdownRoundNum = compState?.countdown?.roundNumber ?? 1;
+  const isCountdownEligible =
+    countdownRoundNum === 1 ||
+    roundCards.find((r) => r.roundNumber === countdownRoundNum)?.teamEligibility === 'ELIGIBLE';
 
   // Dismissible Popups (Change 5)
   const activeUnreadAnnouncements = announcements.filter(
@@ -229,7 +257,57 @@ export const TeamDashboardPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8faf9] pb-16">
+      {/* Synchronized Countdown High-Priority Overlay */}
+      {isCountdownActive && isCountdownEligible && (
+        <div className="fixed inset-0 z-50 bg-[#010905]/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in duration-200">
+          <div className="max-w-md w-full flex flex-col items-center space-y-6">
+            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-mono font-bold uppercase tracking-wider">
+              Synchronized Launch Sequence
+            </span>
+
+            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              Round {countdownRoundNum}: {roundCards.find((r) => r.roundNumber === countdownRoundNum)?.name}
+            </h2>
+
+            {/* Giant Pulsing Countdown Number */}
+            <div className="w-36 h-36 rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/50 flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.3)]">
+              <span className="font-mono text-7xl font-black text-emerald-400 animate-pulse">
+                {countdown.secondsRemaining > 0 ? countdown.secondsRemaining : 'GO!'}
+              </span>
+            </div>
+
+            <p className="text-xs text-emerald-200/70 max-w-xs leading-relaxed">
+              Workspaces will unlock automatically when the counter hits zero. Please do not close or navigate away from this window.
+            </p>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Pre-Round Preparation Alert Banner */}
+        {announcedRoundNum && isTeamEligibleForAnnounced && !isCountdownActive && (
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-emerald-900/60 to-teal-950/80 border-2 border-emerald-500/60 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
+                <Megaphone className="w-6 h-6 animate-bounce" />
+              </div>
+              <div>
+                <div className="font-black text-base text-white flex items-center gap-2">
+                  <span>GET READY! Round {announcedRoundNum} is About to Begin</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/30 text-emerald-300 font-mono text-[10px] uppercase font-bold border border-emerald-400/40">
+                    Pre-Round Notice
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-200/80 mt-0.5">
+                  The administrator has signaled preparation for <strong>{announcedRoundCard?.name}</strong> ({announcedRoundCard?.durationMinutes} minutes). Ensure both relay participants are present.
+                </p>
+              </div>
+            </div>
+            <div className="px-3.5 py-1.5 rounded-xl bg-emerald-900/70 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold whitespace-nowrap">
+              Standby for Countdown
+            </div>
+          </div>
+        )}
         {/* Official Tournament Winner Banner */}
         {(leaderboard as any)?.winnerTeam && (
           <div className="p-6 rounded-3xl bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-emerald-500/15 border-2 border-amber-400 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-5 animate-in fade-in">
