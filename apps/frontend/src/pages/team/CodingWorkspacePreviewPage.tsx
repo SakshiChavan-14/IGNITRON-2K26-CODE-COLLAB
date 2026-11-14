@@ -15,6 +15,9 @@ import {
   CheckCircle2,
   ArrowRight,
   Lock,
+  FileText,
+  Sparkles,
+  Layers,
 } from 'lucide-react';
 import CodeMirror, { EditorView, keymap } from '@uiw/react-codemirror';
 import { cpp } from '@codemirror/lang-cpp';
@@ -535,118 +538,168 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
 
       {/* Main Workspace Split View */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
-        {/* Left Column: Problem Statement (5 columns) */}
-        <div className="lg:col-span-5 border-r border-slate-800 flex flex-col h-full bg-slate-950 overflow-y-auto p-6 space-y-5">
-          {/* Case Switcher for Round 3 */}
+        {/* Left Column: Problem Statement (5 columns, independent scroll) */}
+        <div className="lg:col-span-5 border-r border-slate-800 flex flex-col h-full bg-slate-950 overflow-y-auto p-5 sm:p-6 space-y-6">
+          {/* Case Switcher for Round 3 Final Boss Coding */}
           {roundNumber === 3 && (
-            <div className="space-y-1.5 pb-2 border-b border-slate-800">
+            <div className="space-y-2 pb-4 border-b border-slate-800/80">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase text-slate-400 font-bold block">
-                  Select Problem Case:
+                <span className="text-[11px] font-mono uppercase text-slate-300 font-bold flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Final Boss Relay Cases:</span>
                 </span>
-                <span className="text-[11px] font-mono text-emerald-400">
-                  {submittedCases.length} / 3 Cases Submitted
+                <span className="text-[11px] font-mono text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
+                  {submittedCases.length} of 3 Cases Submitted
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 {[1, 2, 3].map((cNum) => {
                   const isCaseDone = submittedCases.includes(cNum);
+                  const isCurrent = activeCase === cNum;
                   return (
                     <button
                       key={cNum}
+                      type="button"
                       onClick={() => handleSelectCase(cNum)}
-                      className={`py-2 px-2 rounded-lg text-xs font-bold font-mono transition border text-center ${
-                        activeCase === cNum
-                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
+                      className={`p-2.5 rounded-xl text-left transition border cursor-pointer relative overflow-hidden ${
+                        isCurrent
+                          ? 'bg-emerald-900/60 text-white border-emerald-400 shadow-sm ring-1 ring-emerald-400/30'
                           : isCaseDone
-                          ? 'bg-slate-900/90 text-emerald-400 border-emerald-800/60 hover:bg-slate-800'
-                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800'
+                          ? 'bg-slate-900 text-emerald-300 border-emerald-700/60 hover:bg-slate-800/90'
+                          : 'bg-slate-900/90 text-slate-400 border-slate-800 hover:bg-slate-800/80'
                       }`}
                     >
-                      <div className="flex items-center justify-center gap-1">
-                        <span>Case {cNum}</span>
-                        {isCaseDone && <CheckCircle2 className="w-3 h-3 text-emerald-300 shrink-0" />}
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="font-mono font-bold text-xs text-white">Case {cNum}</span>
+                        {isCaseDone ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-700/60">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            <span>Done</span>
+                          </span>
+                        ) : isCurrent ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-mono text-emerald-300 bg-emerald-800/70 px-1.5 py-0.2 rounded">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>Active</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono text-slate-500">
+                            Pending
+                          </span>
+                        )}
                       </div>
-                      <span className="block text-[10px] font-normal opacity-80">
+                      <div className="text-[11px] font-mono font-bold text-amber-400/90">
                         {cNum === 1 ? '20 Pts' : cNum === 2 ? '25 Pts' : '45 Pts'}
-                      </span>
+                      </div>
                     </button>
                   );
                 })}
               </div>
+              <p className="text-[11px] text-slate-400 leading-snug">
+                Each case maintains an independent draft and separate submission. Switching cases preserves your code safely.
+              </p>
             </div>
           )}
 
-          {/* Problem Header */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+          {/* Problem Header Section */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
                 {roundNumber === 2 ? 'Problem R2-B1' : `Problem R3-C0${activeCase}`}
               </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-slate-800 text-slate-400">
-                {roundNumber === 2 ? 'Bug Hunt' : `Case ${activeCase} of 3`}
+              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono uppercase bg-slate-800 text-slate-300 border border-slate-700">
+                {roundNumber === 2 ? 'Bug Hunt Arena' : `Case ${activeCase} of 3`}
               </span>
-              <span className="text-[11px] font-mono text-amber-400 font-semibold ml-auto">
+              <span className="text-xs font-mono font-extrabold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/30 ml-auto">
                 {currentQuestion?.marks || (roundNumber === 2 ? 100 : activeCase === 1 ? 20 : activeCase === 2 ? 25 : 45)} Points
               </span>
             </div>
 
-            <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight pt-1">
               {currentQuestion?.title || (roundNumber === 2 ? 'Bug Hunt: Distributed Token Bucket Rate Limiter' : 'Relay Coding Challenge')}
             </h1>
-            <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 mt-2">
-              <span>Time Limit: 2.0s</span>
+
+            <div className="flex items-center gap-3 text-xs font-mono text-slate-400 pt-1">
+              <span className="text-slate-300">Time Limit: <strong className="text-emerald-400">2.0s</strong></span>
               <span>&bull;</span>
-              <span>Memory Limit: 256MB</span>
+              <span className="text-slate-300">Memory Limit: <strong className="text-emerald-400">256 MB</strong></span>
+              <span>&bull;</span>
+              <span className="text-slate-300">Standard I/O</span>
             </div>
           </div>
 
-          {/* Problem Prompt / Description */}
-          <div className="text-xs text-slate-300 space-y-3 leading-relaxed whitespace-pre-wrap font-sans">
-            {currentQuestion?.description || (
-              <p>
-                Analyze the starter code on the right. Fix logic flaws, boundary errors, and edge cases according to the tournament specification.
-              </p>
-            )}
+          {/* Problem Overview & Instructions */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold font-mono text-slate-300 uppercase tracking-wide">
+              <FileText className="w-4 h-4 text-emerald-400" />
+              <span>Problem Description & Specification</span>
+            </div>
+
+            <div className="text-sm text-slate-200 space-y-3 leading-relaxed whitespace-pre-wrap font-sans bg-slate-900/50 p-4 rounded-xl border border-slate-800/80">
+              {currentQuestion?.description || (
+                <p>
+                  Analyze the starter code on the right. Fix logic flaws, boundary errors, and edge cases according to the tournament specification.
+                </p>
+              )}
+            </div>
           </div>
 
-          {/* Rubric Breakdown */}
+          {/* Evaluation Criteria & Rubric Breakdown */}
           {currentQuestion?.rubric && (
-            <div className="space-y-2 p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs">
-              <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider font-mono">
-                Official Evaluation Rubric:
+            <div className="space-y-2.5 p-4 bg-slate-900/70 border border-slate-800 rounded-xl">
+              <span className="text-xs uppercase font-bold text-emerald-400 flex items-center gap-1.5 tracking-wider font-mono">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Official Evaluation Rubric:</span>
               </span>
-              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-300">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono text-slate-300 pt-1">
                 {Object.entries(currentQuestion.rubric).map(([k, v]) => (
-                  <div key={k} className="p-1.5 rounded bg-slate-950/80 border border-slate-800 flex justify-between">
-                    <span className="capitalize">{k.replace(/([A-Z])/g, ' $1')}:</span>
-                    <span className="font-bold text-emerald-400">{v} Pts</span>
+                  <div key={k} className="p-2 rounded-lg bg-slate-950/90 border border-slate-800 flex justify-between items-center">
+                    <span className="capitalize text-slate-300">{k.replace(/([A-Z])/g, ' $1')}:</span>
+                    <span className="font-extrabold text-emerald-400">{v} Pts</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Sample Cases */}
+          {/* Sample Test Cases with Copy & Quick-Run */}
           {currentQuestion?.sampleTestCases && currentQuestion.sampleTestCases.length > 0 && (
-            <div className="space-y-3 pt-2">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                Sample Test Cases
-              </h3>
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Sample Test Cases ({currentQuestion.sampleTestCases.length})</span>
+                </h3>
+                <span className="text-[11px] text-slate-500 font-mono">Run in console below</span>
+              </div>
+
               {currentQuestion.sampleTestCases.map((tc, idx) => (
-                <div key={idx} className="p-3 bg-slate-900 rounded-lg border border-slate-800 text-xs font-mono space-y-1.5">
-                  <span className="text-[10px] text-slate-400 uppercase block font-bold">Sample {idx + 1}</span>
-                  <div>
-                    <span className="text-slate-500 block text-[10px]">Input:</span>
-                    <pre className="text-slate-200">{tc.stdin}</pre>
+                <div key={idx} className="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800 text-xs font-mono space-y-2">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+                    <span className="text-[11px] text-emerald-400 uppercase font-bold">Sample Case {idx + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRunCode(tc.stdin)}
+                      disabled={isCompetitionPaused || isRunning}
+                      className="px-2 py-0.5 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <Play className="w-2.5 h-2.5 fill-current" />
+                      <span>Test Sample {idx + 1}</span>
+                    </button>
                   </div>
+
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Expected Output:</span>
-                    <pre className="text-emerald-400">{tc.expectedOutput}</pre>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Standard Input:</span>
+                    <pre className="text-slate-200 bg-slate-950 p-2 rounded-md border border-slate-850 mt-0.5 overflow-x-auto whitespace-pre-wrap">{tc.stdin}</pre>
                   </div>
+
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Expected Output:</span>
+                    <pre className="text-emerald-400 bg-slate-950 p-2 rounded-md border border-slate-850 mt-0.5 overflow-x-auto whitespace-pre-wrap">{tc.expectedOutput}</pre>
+                  </div>
+
                   {tc.explanation && (
-                    <div className="text-[10px] text-slate-500 italic pt-1 border-t border-slate-800">
-                      {tc.explanation}
+                    <div className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-800/60">
+                      <strong>Explanation:</strong> {tc.explanation}
                     </div>
                   )}
                 </div>
@@ -656,17 +709,17 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         </div>
 
         {/* Right Column: CodeMirror 6 Editor & Execution Panel (7 columns) */}
-        <div className="lg:col-span-7 flex flex-col h-full bg-slate-950">
+        <div className="lg:col-span-7 flex flex-col h-full bg-slate-950 overflow-hidden">
           {/* Editor Header Bar */}
-          <div className="h-12 border-b border-slate-800 px-4 flex items-center justify-between bg-slate-900/60">
-            <div className="flex items-center gap-4">
+          <div className="h-12 border-b border-slate-800 px-4 flex items-center justify-between bg-slate-900/70 shrink-0">
+            <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Code2 className="w-4 h-4 text-emerald-400" />
                 <select
                   value={language}
                   disabled={isCurrentCaseSubmitted || isCompetitionPaused}
                   onChange={(e) => handleLanguageChange(e.target.value as any)}
-                  className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-60"
+                  className="px-2.5 py-1 bg-slate-950 border border-slate-750 rounded-lg text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-60 cursor-pointer"
                 >
                   <option value="typescript">TypeScript</option>
                   <option value="python">Python</option>
@@ -679,23 +732,23 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
               {/* Autosave Sync Status Pill */}
               <div className="flex items-center gap-1.5 text-xs font-mono">
                 {isCurrentCaseSubmitted ? (
-                  <span className="flex items-center gap-1 text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 text-[11px]">
+                  <span className="flex items-center gap-1 text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded-lg border border-sky-500/25 text-[11px] font-bold">
                     <CheckCircle2 className="w-3 h-3" />
                     <span>Submitted (Read-Only)</span>
                   </span>
                 ) : saveStatus === 'saving' ? (
-                  <span className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 text-[11px]">
+                  <span className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/25 text-[11px]">
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Saving...</span>
+                    <span>Autosaving draft...</span>
                   </span>
                 ) : saveStatus === 'saved' ? (
-                  <span className="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[11px]">
+                  <span className="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-lg border border-emerald-500/25 text-[11px]">
                     <Check className="w-3 h-3" />
-                    <span>Team Draft Synced</span>
+                    <span>Draft Synced</span>
                   </span>
                 ) : saveStatus === 'failed' ? (
                   <span
-                    className="flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 text-[11px]"
+                    className="flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-lg border border-rose-500/25 text-[11px]"
                     title={saveError || 'Save failed'}
                   >
                     <AlertTriangle className="w-3 h-3" />
@@ -707,13 +760,14 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
 
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => handleRunCode()}
                 disabled={isRunning || isCompetitionPaused}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors border border-slate-700 disabled:opacity-50"
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold flex items-center gap-1.5 transition-colors border border-slate-700 disabled:opacity-50 cursor-pointer shadow-2xs"
               >
                 {isRunning ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
                     <span>Running...</span>
                   </>
                 ) : (
@@ -725,9 +779,10 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
               </button>
 
               <button
+                type="button"
                 onClick={() => setConfirmSubmitOpen(true)}
                 disabled={isSubmitting || isCurrentCaseSubmitted || isCompetitionPaused}
-                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
+                className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>
@@ -744,7 +799,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
           </div>
 
           {/* CodeMirror 6 Editor Container */}
-          <div className="flex-1 overflow-hidden relative">
+          <div className="flex-1 overflow-hidden relative min-h-[280px]">
             <CodeMirror
               value={code}
               height="100%"
@@ -764,54 +819,95 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
           </div>
 
           {/* Bottom Execution Panel */}
-          <div className="h-48 border-t border-slate-800 flex flex-col bg-slate-900/40">
-            <div className="h-9 px-4 border-b border-slate-800 flex items-center justify-between text-xs font-mono">
+          <div className="h-52 border-t border-slate-800 flex flex-col bg-slate-900/60 shrink-0">
+            <div className="h-9 px-4 border-b border-slate-800 flex items-center justify-between text-xs font-mono bg-slate-950/40">
               <div className="flex items-center gap-4">
                 <button
+                  type="button"
                   onClick={() => setActiveTab('sample')}
-                  className={`py-2 border-b-2 font-bold ${
-                    activeTab === 'sample' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400'
+                  className={`py-2 border-b-2 font-bold transition cursor-pointer ${
+                    activeTab === 'sample' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-300'
                   }`}
                 >
                   Sample Tests
                 </button>
                 <button
+                  type="button"
                   onClick={() => setActiveTab('custom')}
-                  className={`py-2 border-b-2 font-bold ${
-                    activeTab === 'custom' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400'
+                  className={`py-2 border-b-2 font-bold transition cursor-pointer ${
+                    activeTab === 'custom' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-300'
                   }`}
                 >
                   Custom Stdin
                 </button>
                 <button
+                  type="button"
                   onClick={() => setActiveTab('output')}
-                  className={`py-2 border-b-2 font-bold ${
-                    activeTab === 'output' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400'
+                  className={`py-2 border-b-2 font-bold transition cursor-pointer ${
+                    activeTab === 'output' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-300'
                   }`}
                 >
                   Execution Output
                 </button>
               </div>
+
+              {executionResult && (
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className={`px-2 py-0.5 rounded font-bold ${
+                    executionResult.status.id === 3
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  }`}>
+                    {executionResult.status.description}
+                  </span>
+                  {executionResult.executionTimeSeconds && (
+                    <span className="text-slate-400 font-mono">
+                      {Math.round(executionResult.executionTimeSeconds * 1000)} ms
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="flex-1 p-3 overflow-y-auto font-mono text-xs text-slate-300">
+            <div className="flex-1 p-3 overflow-y-auto font-mono text-xs text-slate-300 bg-slate-950/80">
               {activeTab === 'sample' && (
                 <div className="space-y-2">
-                  <div className="p-2.5 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
-                    <div>
-                      <span className="font-semibold text-slate-200 block">Sample 1 Test</span>
-                      <span className="text-[11px] text-slate-500 font-mono">
-                        {currentQuestion?.sampleTestCases?.[0]?.stdin || 'CAPACITY=10 REFILL=2 CONSUME=5'}
-                      </span>
+                  {currentQuestion?.sampleTestCases && currentQuestion.sampleTestCases.length > 0 ? (
+                    currentQuestion.sampleTestCases.map((tc, idx) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-3">
+                        <div className="truncate">
+                          <span className="font-bold text-slate-200 block text-xs">Sample {idx + 1} Input</span>
+                          <span className="text-[11px] text-slate-400 font-mono truncate block">
+                            {tc.stdin || '(Empty input)'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRunCode(tc.stdin)}
+                          disabled={isCompetitionPaused || isRunning}
+                          className="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition cursor-pointer shrink-0 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <Play className="w-2.5 h-2.5 fill-current" />
+                          <span>Run Sample {idx + 1}</span>
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="font-semibold text-slate-200 block">Default Sample Test</span>
+                        <span className="text-[11px] text-slate-500 font-mono">CAPACITY=10 REFILL=2 CONSUME=5</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRunCode('CAPACITY=10 REFILL=2 CONSUME=5')}
+                        disabled={isCompetitionPaused || isRunning}
+                        className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 disabled:opacity-50 cursor-pointer"
+                      >
+                        Run Default
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleRunCode(currentQuestion?.sampleTestCases?.[0]?.stdin)}
-                      disabled={isCompetitionPaused}
-                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 disabled:opacity-50"
-                    >
-                      Run Case 1
-                    </button>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -819,48 +915,59 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
                 <textarea
                   value={customInput}
                   onChange={(e) => setCustomInput(e.target.value)}
-                  placeholder="Enter custom stdin payload..."
+                  placeholder="Enter custom standard input (stdin) payload here..."
                   disabled={isCompetitionPaused}
-                  className="w-full h-full p-2 bg-slate-950 border border-slate-800 rounded font-mono text-xs text-slate-200 resize-none focus:outline-none disabled:opacity-50"
+                  className="w-full h-full p-2.5 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs text-slate-200 resize-none focus:outline-none focus:border-emerald-500/50 disabled:opacity-50"
                 />
               )}
 
               {activeTab === 'output' && (
                 <div className="space-y-2">
                   {isRunning && (
-                    <div className="flex items-center gap-2 text-slate-400">
+                    <div className="flex items-center gap-2 text-slate-400 py-3">
                       <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                      <span>Executing in sandbox...</span>
+                      <span>Executing in secure isolated sandbox environment...</span>
                     </div>
                   )}
 
                   {runError && (
-                    <div className="p-2.5 bg-amber-950/30 border border-amber-800/40 rounded text-amber-300 text-xs">
-                      {runError}
+                    <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-lg text-rose-300 text-xs">
+                      <strong>Execution Error:</strong> {runError}
                     </div>
                   )}
 
                   {executionResult && !isRunning && (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between p-2 bg-slate-950 border border-slate-800 rounded">
-                        <span className="font-bold text-emerald-400">
-                          {executionResult.status.description}
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          {executionResult.executionTimeSeconds ? `${Math.round(executionResult.executionTimeSeconds * 1000)} ms` : ''}
-                        </span>
-                      </div>
                       {executionResult.stdout && (
-                        <pre className="text-emerald-400 font-mono whitespace-pre-wrap text-xs bg-slate-950 p-2 rounded">
-                          {executionResult.stdout}
-                        </pre>
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">Standard Output (stdout):</span>
+                          <pre className="text-emerald-300 font-mono whitespace-pre-wrap text-xs bg-slate-900 p-2.5 rounded-lg border border-slate-800 overflow-x-auto">
+                            {executionResult.stdout}
+                          </pre>
+                        </div>
+                      )}
+                      {executionResult.stderr && (
+                        <div>
+                          <span className="text-[10px] text-rose-400 uppercase font-bold block mb-1">Standard Error (stderr):</span>
+                          <pre className="text-rose-300 font-mono whitespace-pre-wrap text-xs bg-rose-950/30 p-2.5 rounded-lg border border-rose-800/40 overflow-x-auto">
+                            {executionResult.stderr}
+                          </pre>
+                        </div>
+                      )}
+                      {executionResult.compileOutput && (
+                        <div>
+                          <span className="text-[10px] text-amber-400 uppercase font-bold block mb-1">Compiler Output:</span>
+                          <pre className="text-amber-300 font-mono whitespace-pre-wrap text-xs bg-amber-950/30 p-2.5 rounded-lg border border-amber-800/40 overflow-x-auto">
+                            {executionResult.compileOutput}
+                          </pre>
+                        </div>
                       )}
                     </div>
                   )}
 
                   {!isRunning && !executionResult && !runError && (
-                    <div className="text-center p-4 text-slate-500">
-                      Click "Run Code" to compile and run against test input.
+                    <div className="text-center py-6 text-slate-500">
+                      Click "Run Code" above or test a sample case to execute against standard input.
                     </div>
                   )}
                 </div>

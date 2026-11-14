@@ -366,6 +366,7 @@ export class ArenaService {
 
   // ============================================================================
   // WORKSPACE DRAFTS & CODE SUBMISSIONS (ROUNDS 2 & 3)
+  // Strict case draft isolation (Case 1, 2, 3) and independent submission state
   // ============================================================================
 
   /**
