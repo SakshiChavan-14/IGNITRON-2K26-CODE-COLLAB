@@ -35,7 +35,9 @@ export class QuestionsController {
 
   /**
    * Sanitized questions for contestants by round number (Guarded for Team / Admin)
-   * Strictly protects correct answers, explanations, and hidden test cases, and asserts round eligibility.
+   * Strictly protects correct answers, explanations, and hidden test cases.
+   * Verifies contestant authentication, round eligibility, official active status,
+   * and blocks countdown/premature access before official round start.
    */
   @Get('round/:roundNumber')
   @UseGuards(JwtAuthGuard, RolesGuard)

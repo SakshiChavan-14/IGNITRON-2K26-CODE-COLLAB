@@ -86,18 +86,27 @@ export class ArenaService {
       where: { id: 'global' },
     });
 
+    const now = new Date();
+    const isCountdownActive = Boolean(
+      state?.countdownEndsAt && state.countdownEndsAt.getTime() > now.getTime(),
+    );
+
     const isRoundCurrent = state?.currentRoundNumber === roundNumber;
     const isRoundActive =
-      round.status === 'ACTIVE' ||
-      (isRoundCurrent && state?.status === (`ROUND_${roundNumber}_ACTIVE` as any));
+      !isCountdownActive &&
+      (round.status === 'ACTIVE' ||
+        (isRoundCurrent && state?.status === (`ROUND_${roundNumber}_ACTIVE` as any)));
 
-    // CHANGE 6: Enforce workspace lock before round start on backend
+    // Strict workspace and arena visibility lock before round start and after conclusion
     if (action === 'READ') {
-      const isConcludedOrSubmitted =
-        round.status === 'COMPLETED' ||
-        progress.participationStatus === 'SUBMITTED';
+      const canReviewSubmitted = progress.participationStatus === 'SUBMITTED';
 
-      if (!isRoundActive && !isConcludedOrSubmitted) {
+      if (!isRoundActive && !canReviewSubmitted) {
+        if (isCountdownActive) {
+          throw new ForbiddenException(
+            `Round ${roundNumber} countdown is in progress. The competition arena will unlock automatically when the countdown completes.`,
+          );
+        }
         throw new ForbiddenException(
           `The competition arena will become available when Round ${roundNumber} begins.`,
         );
@@ -107,26 +116,32 @@ export class ArenaService {
     // If writing or submitting, enforce strict timing & state boundaries
     if (action === 'WRITE' || action === 'SUBMIT') {
       if (state?.isPaused) {
-        throw new BadRequestException('Competition is currently paused by the administrator.');
+        throw new ForbiddenException('Competition is currently paused by the administrator.');
+      }
+
+      if (isCountdownActive) {
+        throw new ForbiddenException(
+          `Round ${roundNumber} countdown is in progress. Submissions and changes are locked until the round begins.`,
+        );
       }
 
       if (!isRoundActive) {
-        throw new BadRequestException(`Round ${roundNumber} is not currently active.`);
+        throw new ForbiddenException(`Round ${roundNumber} is not currently active.`);
       }
 
-      if (
-        isRoundCurrent &&
-        state?.remainingDurationSeconds !== null &&
-        state?.remainingDurationSeconds !== undefined &&
-        state.remainingDurationSeconds <= 0
-      ) {
-        throw new BadRequestException(`Round ${roundNumber} deadline has expired.`);
+      const isDeadlineExpired =
+        (isRoundCurrent && state?.deadlineAt && state.deadlineAt.getTime() < now.getTime()) ||
+        (isRoundCurrent &&
+          state?.remainingDurationSeconds !== null &&
+          state?.remainingDurationSeconds !== undefined &&
+          state.remainingDurationSeconds <= 0);
+
+      if (isDeadlineExpired) {
+        throw new ForbiddenException(`Round ${roundNumber} deadline has expired.`);
       }
 
-      if (roundNumber === 1 || roundNumber === 2) {
-        if (progress.participationStatus === 'SUBMITTED') {
-          throw new BadRequestException(`Round ${roundNumber} has already been submitted by your team.`);
-        }
+      if (progress.participationStatus === 'SUBMITTED') {
+        throw new ForbiddenException(`Round ${roundNumber} has already been submitted by your team.`);
       }
     }
 
