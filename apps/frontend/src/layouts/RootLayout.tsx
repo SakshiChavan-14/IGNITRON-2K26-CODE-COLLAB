@@ -6,6 +6,10 @@ export const RootLayout: React.FC = () => {
   const location = useLocation();
   const isDarkPage = ['/', '/register', '/login', '/admin/login'].includes(location.pathname);
   const isLanding = location.pathname === '/';
+  const isArenaOrWorkspace =
+    location.pathname.startsWith('/team/arena') ||
+    location.pathname.startsWith('/team/workspace') ||
+    location.pathname === '/workspace';
 
   return (
     <div
@@ -22,8 +26,8 @@ export const RootLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      {/* App Footer (Landing page provides its own rich consolidated footer) */}
-      {!isLanding && (
+      {/* App Footer (Landing page and full-screen arenas manage their own layouts) */}
+      {!isLanding && !isArenaOrWorkspace && (
         <footer
           className={`py-6 text-center text-xs font-mono transition-colors ${
             isDarkPage

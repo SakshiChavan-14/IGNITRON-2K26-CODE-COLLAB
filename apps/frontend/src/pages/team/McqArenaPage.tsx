@@ -18,6 +18,7 @@ import {
   Check,
   ShieldAlert,
   ArrowRight,
+  ArrowLeft,
   Trophy,
   AlertCircle,
   Eye,
@@ -268,53 +269,78 @@ export const McqArenaPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8faf9] flex flex-col">
-      {/* Top Header & Server Timer Bar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 sm:px-6 py-3 shadow-xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Link to="/team/dashboard" className="flex items-center gap-2 text-emerald-900 hover:text-emerald-700 transition">
-              <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
-                R1
+      {/* If in Review Mode, render ONLY the single clean review status bar directly under RootLayout Navbar */}
+      {reviewMode ? (
+        <div className="bg-[#02180d] border-b border-emerald-800 text-white px-4 sm:px-6 py-3 shadow-xs sticky top-16 z-20">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setReviewMode(false)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-800/90 hover:bg-emerald-700 text-white text-xs font-bold border border-emerald-600/60 shadow-2xs transition cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Scorecard</span>
+              </button>
+              <div className="h-4 w-px bg-emerald-700/60 hidden sm:block" />
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs sm:text-sm font-bold text-emerald-100">
+                  Round 1: Submitted Answers Review
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700/60 text-[10px] font-mono text-emerald-300 font-bold uppercase">
+                  Read-Only Mode
+                </span>
               </div>
-              <div className="hidden sm:block">
-                <div className="font-extrabold text-xs sm:text-sm text-emerald-950">IGNITRON 2K26</div>
-                <div className="text-[10px] text-slate-500 font-mono">ROUND 1: MCQ ARENA</div>
-              </div>
-            </Link>
-
-            <span className="hidden md:inline-block h-5 w-px bg-slate-200 mx-1" />
-
-            {/* Autosave Status Indicator */}
-            {!reviewMode && !isSubmitted && (
-              <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-slate-500">
-                {savingStatus === 'saving' ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                    <span>Autosaving answer...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Answers synced</span>
-                  </>
-                )}
-              </div>
-            )}
-
-            {reviewMode && (
-              <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-emerald-800 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                <span>Submitted Answers (Score: {submissionResult?.score.toFixed(1)} / 30)</span>
-              </div>
-            )}
-          </div>
-
-          {/* Center Timer / Review Mode Badge */}
-          {reviewMode ? (
-            <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-xl border border-slate-300 bg-slate-100 text-slate-700 font-mono shadow-xs text-xs font-bold">
-              <Eye className="w-3.5 h-3.5 text-slate-500" />
-              <span>Read-Only Review Mode</span>
             </div>
-          ) : (
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-950/80 border border-emerald-700/80 text-emerald-200 font-mono text-xs font-bold">
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span>Score: {submissionResult?.score.toFixed(1)} / 30 pts</span>
+              </div>
+              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/60 border border-slate-700 text-slate-300 font-mono text-[11px]">
+                <Eye className="w-3 h-3 text-slate-400" />
+                <span>Responses Locked</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Top Arena Header & Server Timer Bar during active round */
+        <header className="bg-white border-b border-slate-200 sticky top-16 z-20 px-4 sm:px-6 py-3 shadow-xs">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Link to="/team/dashboard" className="flex items-center gap-2 text-emerald-900 hover:text-emerald-700 transition">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
+                  R1
+                </div>
+                <div className="hidden sm:block">
+                  <div className="font-extrabold text-xs sm:text-sm text-emerald-950">IGNITRON 2K26</div>
+                  <div className="text-[10px] text-slate-500 font-mono">ROUND 1: MCQ ARENA</div>
+                </div>
+              </Link>
+
+              <span className="hidden md:inline-block h-5 w-px bg-slate-200 mx-1" />
+
+              {/* Autosave Status Indicator */}
+              {!isSubmitted && (
+                <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-slate-500">
+                  {savingStatus === 'saving' ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                      <span>Autosaving answer...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Answers synced</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Center Timer */}
             <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-950 font-mono shadow-xs">
               <Clock className={`w-4 h-4 ${timer.secondsLeft < 300 ? 'text-red-600 animate-pulse' : 'text-emerald-700'}`} />
               <span className="text-xs font-bold text-slate-600 hidden sm:inline">Time Left:</span>
@@ -322,18 +348,8 @@ export const McqArenaPage: React.FC = () => {
                 {timer.formatted}
               </span>
             </div>
-          )}
 
-          {/* Right Action Button */}
-          {reviewMode ? (
-            <button
-              onClick={() => setReviewMode(false)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition"
-            >
-              <Trophy className="w-3.5 h-3.5" />
-              <span>Back to Score Card</span>
-            </button>
-          ) : (
+            {/* Right Action Button */}
             <button
               onClick={() => setConfirmSubmitOpen(true)}
               disabled={isSubmitted || effectiveIsPaused}
@@ -342,24 +358,8 @@ export const McqArenaPage: React.FC = () => {
               <Send className="w-3.5 h-3.5" />
               <span>Submit Round 1</span>
             </button>
-          )}
-        </div>
-      </header>
-
-      {/* Read-Only Review Mode Banner */}
-      {reviewMode && (
-        <div className="bg-emerald-900 text-white px-4 py-2.5 text-xs font-semibold flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Read-Only Review Mode — Viewing submitted answers. Scorecard and responses are locked.</span>
           </div>
-          <button
-            onClick={() => setReviewMode(false)}
-            className="px-3 py-1 bg-white text-emerald-950 font-bold text-xs rounded-lg hover:bg-emerald-50 transition"
-          >
-            Back to Score Card
-          </button>
-        </div>
+        </header>
       )}
 
       {/* Paused Banner */}
