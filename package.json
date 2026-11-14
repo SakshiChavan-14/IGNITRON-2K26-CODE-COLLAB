@@ -21,7 +21,8 @@
     "db:deploy": "npm run prisma:deploy -w @ignitron/backend",
     "db:seed": "npm run prisma:seed -w @ignitron/backend",
     "db:studio": "npm run prisma:studio -w @ignitron/backend",
-    "test:db": "node scripts/test-database.cjs"
+    "test:db": "node scripts/test-database.cjs",
+    "test:phase1": "node scripts/test-phase1-workspace-shortlist-teams.cjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
