@@ -40,11 +40,13 @@ export class ArenaController {
       success: true,
       data: {
         roundNumber,
+        durationMinutes: data.round.durationMinutes,
         eligibilityStatus: data.progress.eligibilityStatus,
         participationStatus: data.progress.participationStatus,
         isRoundActive: data.isRoundActive,
         isPaused: data.isPaused,
         remainingSeconds: data.remainingSeconds,
+        deadlineAt: data.state?.deadlineAt ? data.state.deadlineAt.toISOString() : null,
       },
     };
   }

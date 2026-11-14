@@ -39,27 +39,32 @@ export const useServerTimer = (
   isPaused: boolean,
   remainingSecondsFromServer: number | null | undefined,
 ) => {
-  const [secondsLeft, setSecondsLeft] = useState<number>(remainingSecondsFromServer ?? 0);
-
-  useEffect(() => {
+  const calculateRemaining = (): number => {
     if (isPaused) {
-      setSecondsLeft(remainingSecondsFromServer ?? 0);
-      return;
+      return remainingSecondsFromServer ?? 0;
     }
-
-    if (remainingSecondsFromServer !== null && remainingSecondsFromServer !== undefined) {
-      setSecondsLeft(remainingSecondsFromServer);
-    } else if (deadlineAt) {
+    if (deadlineAt) {
       const deadline = new Date(deadlineAt).getTime();
       const now = Date.now();
-      setSecondsLeft(Math.max(0, Math.floor((deadline - now) / 1000)));
-    } else {
-      setSecondsLeft(0);
+      return Math.max(0, Math.floor((deadline - now) / 1000));
+    }
+    return remainingSecondsFromServer ?? 0;
+  };
+
+  const [secondsLeft, setSecondsLeft] = useState<number>(calculateRemaining);
+
+  useEffect(() => {
+    setSecondsLeft(calculateRemaining());
+
+    if (isPaused || !deadlineAt) {
       return;
     }
 
     const interval = setInterval(() => {
-      setSecondsLeft((prev) => Math.max(0, prev - 1));
+      const deadline = new Date(deadlineAt).getTime();
+      const now = Date.now();
+      const remaining = Math.max(0, Math.floor((deadline - now) / 1000));
+      setSecondsLeft(remaining);
     }, 1000);
 
     return () => clearInterval(interval);
