@@ -42,8 +42,12 @@ export const McqArenaPage: React.FC = () => {
   const [submissionResult, setSubmissionResult] = useState<McqSubmissionResultDto | null>(null);
   const [reviewMode, setReviewMode] = useState<boolean>(false);
 
-  // Timer State from initial fetch
-  const [initialRemainingSeconds, setInitialRemainingSeconds] = useState<number>(30 * 60);
+  // Configured duration from server or default 30m
+  const r1ConfiguredDuration =
+    compState?.rounds?.find((r) => r.roundNumber === 1)?.durationMinutes ?? 30;
+  const [initialRemainingSeconds, setInitialRemainingSeconds] = useState<number>(
+    r1ConfiguredDuration * 60,
+  );
   const [initialPaused, setInitialPaused] = useState<boolean>(false);
 
   // Autosave indicator
@@ -54,11 +58,14 @@ export const McqArenaPage: React.FC = () => {
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   // Active competition timer
+  const isR1Active = compState?.status === 'ROUND_1_ACTIVE';
   const effectiveIsPaused = compState?.isPaused ?? initialPaused;
   const timer = useServerTimer(
-    compState?.deadlineAt,
+    isR1Active ? compState?.deadlineAt : null,
     effectiveIsPaused,
-    compState?.remainingDurationSeconds ?? initialRemainingSeconds,
+    isR1Active
+      ? compState?.remainingDurationSeconds ?? initialRemainingSeconds
+      : r1ConfiguredDuration * 60,
   );
 
   // Fetch initial arena state
@@ -269,25 +276,27 @@ export const McqArenaPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8faf9] flex flex-col">
-      {/* If in Review Mode, render ONLY the single clean review status bar directly under RootLayout Navbar */}
+      {/* If in Review Mode, render compact non-header review toolbar directly under RootLayout Navbar */}
       {reviewMode ? (
-        <div className="bg-[#02180d] border-b border-emerald-800 text-white px-4 sm:px-6 py-3 shadow-xs sticky top-16 z-20">
+        <div className="bg-slate-900 border-b border-slate-800 text-slate-100 px-4 sm:px-6 py-2.5 shadow-xs sticky top-16 z-20">
           <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setReviewMode(false)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-800/90 hover:bg-emerald-700 text-white text-xs font-bold border border-emerald-600/60 shadow-2xs transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold border border-slate-700 shadow-2xs transition cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Scorecard</span>
               </button>
-              <div className="h-4 w-px bg-emerald-700/60 hidden sm:block" />
+              <div className="h-4 w-px bg-slate-700 hidden sm:block" />
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs sm:text-sm font-bold text-emerald-100">
+                <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-mono text-emerald-300 font-extrabold uppercase">
+                  R1
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-slate-100">
                   Round 1: Submitted Answers Review
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700/60 text-[10px] font-mono text-emerald-300 font-bold uppercase">
+                <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-600/40 text-[10px] font-mono text-amber-300 font-bold uppercase">
                   Read-Only Mode
                 </span>
               </div>
@@ -298,7 +307,7 @@ export const McqArenaPage: React.FC = () => {
                 <Trophy className="w-3.5 h-3.5 text-amber-400" />
                 <span>Score: {submissionResult?.score.toFixed(1)} / 30 pts</span>
               </div>
-              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/60 border border-slate-700 text-slate-300 font-mono text-[11px]">
+              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-300 font-mono text-[11px]">
                 <Eye className="w-3 h-3 text-slate-400" />
                 <span>Responses Locked</span>
               </div>
@@ -306,33 +315,40 @@ export const McqArenaPage: React.FC = () => {
           </div>
         </div>
       ) : (
-        /* Top Arena Header & Server Timer Bar during active round */
-        <header className="bg-white border-b border-slate-200 sticky top-16 z-20 px-4 sm:px-6 py-3 shadow-xs">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <Link to="/team/dashboard" className="flex items-center gap-2 text-emerald-900 hover:text-emerald-700 transition">
-                <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
-                  R1
-                </div>
-                <div className="hidden sm:block">
-                  <div className="font-extrabold text-xs sm:text-sm text-emerald-950">IGNITRON 2K26</div>
-                  <div className="text-[10px] text-slate-500 font-mono">ROUND 1: MCQ ARENA</div>
-                </div>
+        /* Top Arena Compact Toolbar & Server Timer Bar during active round (NO duplicate header) */
+        <div className="bg-slate-900 border-b border-slate-800 text-slate-100 sticky top-16 z-20 px-4 sm:px-6 py-2.5 shadow-sm">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            {/* Left: Dashboard return link, Round Badge & Name, and Autosave status */}
+            <div className="flex items-center gap-2.5">
+              <Link
+                to="/team/dashboard"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition"
+                title="Return to Team Dashboard"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline">Dashboard</span>
               </Link>
 
-              <span className="hidden md:inline-block h-5 w-px bg-slate-200 mx-1" />
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-extrabold uppercase">
+                  R1
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-slate-100">
+                  Round 1: MCQ Arena
+                </span>
+              </div>
 
               {/* Autosave Status Indicator */}
               {!isSubmitted && (
-                <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-slate-500">
+                <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-slate-400 ml-2 pl-2 border-l border-slate-800">
                   {savingStatus === 'saving' ? (
                     <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                      <span>Autosaving answer...</span>
+                      <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
+                      <span>Saving...</span>
                     </>
                   ) : (
                     <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <Check className="w-3 h-3 text-emerald-400" />
                       <span>Answers synced</span>
                     </>
                   )}
@@ -340,26 +356,43 @@ export const McqArenaPage: React.FC = () => {
               )}
             </div>
 
-            {/* Center Timer */}
-            <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-950 font-mono shadow-xs">
-              <Clock className={`w-4 h-4 ${timer.secondsLeft < 300 ? 'text-red-600 animate-pulse' : 'text-emerald-700'}`} />
-              <span className="text-xs font-bold text-slate-600 hidden sm:inline">Time Left:</span>
-              <span className={`text-sm sm:text-base font-black ${timer.secondsLeft < 300 ? 'text-red-600' : 'text-emerald-950'}`}>
+            {/* Center: Authoritative Server Timer */}
+            <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-950/90 border border-slate-700/80 font-mono shadow-inner">
+              <Clock
+                className={`w-3.5 h-3.5 ${
+                  timer.secondsLeft < 300 ? 'text-red-400 animate-pulse' : 'text-emerald-400'
+                }`}
+              />
+              <span className="text-[11px] text-slate-400 hidden sm:inline">Time Remaining:</span>
+              <span
+                className={`text-xs sm:text-sm font-black ${
+                  timer.secondsLeft < 300 ? 'text-red-400' : 'text-emerald-300'
+                }`}
+              >
                 {timer.formatted}
               </span>
             </div>
 
-            {/* Right Action Button */}
-            <button
-              onClick={() => setConfirmSubmitOpen(true)}
-              disabled={isSubmitted || effectiveIsPaused}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition disabled:opacity-50"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Submit Round 1</span>
-            </button>
+            {/* Right: Question attempted progress and Submit action */}
+            <div className="flex items-center gap-2.5">
+              <div className="hidden lg:flex items-center gap-1 text-[11px] font-mono text-slate-400 bg-slate-800/60 px-2.5 py-1 rounded-lg border border-slate-700/60">
+                <span>Attempted:</span>
+                <strong className="text-emerald-300">
+                  {answeredCount} / {questions.length}
+                </strong>
+              </div>
+
+              <button
+                onClick={() => setConfirmSubmitOpen(true)}
+                disabled={isSubmitted || effectiveIsPaused}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition disabled:opacity-50 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Submit Round 1</span>
+              </button>
+            </div>
           </div>
-        </header>
+        </div>
       )}
 
       {/* Paused Banner */}

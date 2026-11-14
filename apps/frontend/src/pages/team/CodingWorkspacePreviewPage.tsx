@@ -87,10 +87,19 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
   // Authoritative Competition State & Timer
   const { data: compState } = useCompetitionState();
   const isCompetitionPaused = Boolean(compState?.isPaused);
+  const isRoundActive =
+    compState?.currentRoundNumber === roundNumber &&
+    (roundNumber === 2
+      ? compState?.status === 'ROUND_2_ACTIVE'
+      : compState?.status === 'ROUND_3_ACTIVE');
+  const configuredDuration =
+    compState?.rounds?.find((r) => r.roundNumber === roundNumber)?.durationMinutes ??
+    (roundNumber === 2 ? 40 : 60);
+
   const timer = useServerTimer(
-    compState?.deadlineAt,
+    isRoundActive ? compState?.deadlineAt : null,
     isCompetitionPaused,
-    compState?.remainingDurationSeconds,
+    isRoundActive ? compState?.remainingDurationSeconds : configuredDuration * 60,
   );
 
   const [questions, setQuestions] = useState<SanitizedQuestionDto[]>([]);
