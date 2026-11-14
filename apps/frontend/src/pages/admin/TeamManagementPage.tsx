@@ -22,6 +22,8 @@ import {
   ShieldAlert,
   Calendar,
   Clock,
+  Trash2,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const TeamManagementPage: React.FC = () => {
@@ -30,9 +32,12 @@ export const TeamManagementPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Modals state
+  // Modals & notification state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<TeamCredentials | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; code: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [successNotification, setSuccessNotification] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Create team form state
@@ -73,6 +78,7 @@ export const TeamManagementPage: React.FC = () => {
       const res = await adminService.createTeam(newTeam);
       setShowCreateModal(false);
       setCreatedCredentials(res.credentials);
+      setSuccessNotification(`Team "${res.team.teamName}" Created Successfully`);
       // Reset form
       setNewTeam({
         teamCode: '',
@@ -83,11 +89,26 @@ export const TeamManagementPage: React.FC = () => {
           { fullName: '', email: '', phone: '', studentId: '' },
         ],
       });
-      fetchTeams();
+      await fetchTeams();
     } catch (err: any) {
       setFormError(err?.message || 'Failed to create team.');
     } finally {
       setFormSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await adminService.deleteTeam(deleteTarget.id);
+      setSuccessNotification(`Team "${deleteTarget.name}" (${deleteTarget.code}) Deleted Successfully`);
+      setDeleteTarget(null);
+      await fetchTeams();
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete team');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -215,6 +236,22 @@ export const TeamManagementPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Success Notification Alert */}
+      {successNotification && (
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successNotification}</span>
+          </div>
+          <button
+            onClick={() => setSuccessNotification(null)}
+            className="p-1 text-emerald-700 hover:text-emerald-950 rounded-lg hover:bg-emerald-100 transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-1 w-full">
@@ -327,13 +364,17 @@ export const TeamManagementPage: React.FC = () => {
                     {/* Status */}
                     <td className="py-3.5 px-4">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase font-semibold ${
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase font-bold tracking-wider ${
                           team.isActive
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                             : 'bg-rose-100 text-rose-800 border border-rose-200'
                         }`}
                       >
-                        {team.isActive ? team.status : 'DISABLED'}
+                        {team.isActive
+                          ? team.status === 'ACTIVE'
+                            ? 'ACCOUNT ACTIVE'
+                            : team.status
+                          : 'DEACTIVATED'}
                       </span>
                     </td>
 
@@ -371,6 +412,15 @@ export const TeamManagementPage: React.FC = () => {
                           }`}
                         >
                           {team.isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                        </button>
+
+                        {/* Permanently Delete Team */}
+                        <button
+                          onClick={() => setDeleteTarget({ id: team.id, name: team.teamName, code: team.teamCode })}
+                          title={`Permanently delete ${team.teamName}`}
+                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -572,6 +622,65 @@ export const TeamManagementPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Permanent Team Deletion Confirmation */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white border border-rose-200 rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-600">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Permanently Delete Team?</h3>
+                <p className="text-xs text-slate-500">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50/70 border border-rose-200/80 rounded-xl p-4 mb-5 space-y-2 text-xs">
+              <p className="text-rose-900 font-medium">
+                Are you sure you want to delete the following team?
+              </p>
+              <div className="bg-white/80 rounded-lg p-2.5 border border-rose-200/50 space-y-1 font-mono">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Team Name:</span>
+                  <span className="font-bold text-slate-900">{deleteTarget.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Team Code:</span>
+                  <span className="font-bold text-emerald-800">{deleteTarget.code}</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-rose-700 leading-relaxed pt-1">
+                All associated participant profiles, active sessions, submissions, evaluations, and workspace drafts will be permanently and safely deleted.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeleting ? (
+                  <>Deleting Team...</>
+                ) : (
+                  <>Permanently Delete Team</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

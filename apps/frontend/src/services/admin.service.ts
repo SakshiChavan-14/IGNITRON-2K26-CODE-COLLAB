@@ -94,6 +94,18 @@ export const adminService = {
     });
   },
 
+  async deleteTeam(
+    id: string,
+  ): Promise<{ message: string; deletedTeamCode: string }> {
+    return apiClient<{
+      success: boolean;
+      message: string;
+      deletedTeamCode: string;
+    }>(`/admin/teams/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   async exportTeamsCsv(): Promise<string> {
     const res = await fetch('/api/admin/teams/export/csv', {
       credentials: 'include',
