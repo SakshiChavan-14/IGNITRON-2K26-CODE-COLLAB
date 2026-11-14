@@ -110,4 +110,50 @@ export const competitionService = {
     });
     return res.data;
   },
+
+  async updateRoundDuration(
+    roundNumber: number,
+    durationMinutes: number,
+    confirmLiveAdjustment = false,
+  ): Promise<{ success: boolean; roundNumber: number; durationMinutes: number; message: string }> {
+    return apiClient<{ success: boolean; roundNumber: number; durationMinutes: number; message: string }>(
+      `/competition/rounds/${roundNumber}/duration`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ durationMinutes, confirmLiveAdjustment }),
+      },
+    );
+  },
+
+  async announceUpcomingRound(roundNumber: number): Promise<{ message: string }> {
+    return apiClient<{ success: boolean; message: string }>(
+      '/competition/control/announce-round',
+      {
+        method: 'POST',
+        body: JSON.stringify({ roundNumber }),
+      },
+    );
+  },
+
+  async startSynchronizedCountdown(
+    roundNumber: number,
+    durationSeconds = 5,
+  ): Promise<{ message: string; countdownEndsAt?: string; countdownSeconds?: number }> {
+    return apiClient<{ success: boolean; message: string; countdownEndsAt?: string; countdownSeconds?: number }>(
+      '/competition/control/start-countdown',
+      {
+        method: 'POST',
+        body: JSON.stringify({ roundNumber, durationSeconds }),
+      },
+    );
+  },
+
+  async cancelSynchronizedCountdown(): Promise<{ message: string }> {
+    return apiClient<{ success: boolean; message: string }>(
+      '/competition/control/cancel-countdown',
+      {
+        method: 'POST',
+      },
+    );
+  },
 };

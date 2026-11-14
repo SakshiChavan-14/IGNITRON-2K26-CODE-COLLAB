@@ -79,3 +79,52 @@ export const useServerTimer = (
     isExpired: secondsLeft <= 0 && !!deadlineAt,
   };
 };
+
+/**
+ * Server-authoritative synchronized countdown hook:
+ * Calculates real-time countdown (e.g. 5, 4, 3, 2, 1, GO!) based strictly on server `countdownEndsAt` timestamp.
+ * Refreshing the page or reconnecting recalculates remaining seconds without resetting the countdown.
+ */
+export const useSynchronizedCountdown = (
+  countdown: {
+    active: boolean;
+    roundNumber: number;
+    startedAt: string;
+    endsAt: string;
+    remainingSeconds: number;
+    durationSeconds: number;
+  } | null | undefined,
+) => {
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(() => {
+    if (!countdown || !countdown.active) return 0;
+    const endsMs = new Date(countdown.endsAt).getTime();
+    return Math.max(0, Math.ceil((endsMs - Date.now()) / 1000));
+  });
+
+  useEffect(() => {
+    if (!countdown || !countdown.active) {
+      setSecondsRemaining(0);
+      return;
+    }
+
+    const calc = () => {
+      const endsMs = new Date(countdown.endsAt).getTime();
+      const left = Math.max(0, Math.ceil((endsMs - Date.now()) / 1000));
+      setSecondsRemaining(left);
+    };
+
+    calc();
+    const interval = setInterval(calc, 250);
+    return () => clearInterval(interval);
+  }, [countdown?.active, countdown?.endsAt]);
+
+  const isGo = secondsRemaining === 0 && !!countdown?.active;
+
+  return {
+    isActive: Boolean(countdown?.active),
+    roundNumber: countdown?.roundNumber ?? 1,
+    secondsRemaining,
+    isGo,
+    displayNumber: isGo ? 'GO!' : secondsRemaining.toString(),
+  };
+};
