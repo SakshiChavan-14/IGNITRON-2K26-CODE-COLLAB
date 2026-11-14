@@ -137,8 +137,12 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
   const isCurrentCaseSubmitted =
     roundNumber === 2 ? isRoundSubmitted : submittedCases.includes(activeCase);
 
-  // 1. Load round questions
+  // 1. Load round questions (Only when round is active or team is reviewing a submitted round)
   useEffect(() => {
+    if (!isRoundActive && !isRoundSubmitted && compState && compState.status !== `ROUND_${roundNumber}_ACTIVE`) {
+      return;
+    }
+
     let isMounted = true;
     questionAndArenaService
       .getQuestionsForRound(roundNumber)
@@ -154,7 +158,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
       })
       .catch((err) => {
         if (!isMounted) return;
-        if (err?.status === 403 || err?.message?.includes('not qualified')) {
+        if (err?.status === 403 || err?.message?.includes('not qualified') || err?.message?.includes('available')) {
           setAccessDeniedError(err.message);
         }
       });
@@ -162,7 +166,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [roundNumber]);
+  }, [roundNumber, isRoundActive, isRoundSubmitted, compState]);
 
   // Update currentQuestion when activeCase changes in Round 3
   useEffect(() => {
@@ -175,6 +179,10 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
   // 2. Load draft for specific case
   const loadCaseDraft = useCallback(
     async (caseNum: number) => {
+      if (!isRoundActive && !isRoundSubmitted && compState && compState.status !== `ROUND_${roundNumber}_ACTIVE`) {
+        return;
+      }
+
       isInitialLoadedRef.current = false;
       setSaveStatus('idle');
 
@@ -209,7 +217,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         isInitialLoadedRef.current = true;
         setSaveStatus('saved');
       } catch (err: any) {
-        if (err?.status === 403 || err?.message?.includes('not qualified')) {
+        if (err?.status === 403 || err?.message?.includes('not qualified') || err?.message?.includes('available')) {
           setAccessDeniedError(err.message);
         } else {
           console.warn('Could not load draft from backend:', err?.message);
@@ -217,7 +225,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
         isInitialLoadedRef.current = true;
       }
     },
-    [roundNumber],
+    [roundNumber, isRoundActive, isRoundSubmitted, compState],
   );
 
   useEffect(() => {
@@ -417,8 +425,16 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
   };
 
   // Access Denied / Locked Screen (Security Guarding)
-  if (accessDeniedError) {
-    const isLockedPreRound = accessDeniedError.toLowerCase().includes('will become available');
+  if (accessDeniedError || (!isRoundActive && !isRoundSubmitted && !isCurrentCaseSubmitted && compState)) {
+    const isLockedPreRound =
+      !accessDeniedError ||
+      accessDeniedError.toLowerCase().includes('will become available') ||
+      accessDeniedError.toLowerCase().includes('countdown') ||
+      accessDeniedError.toLowerCase().includes('not currently active');
+
+    const isRoundConcluded =
+      compState?.status === 'COMPLETED' ||
+      (Boolean(compState?.currentRoundNumber) && (compState?.currentRoundNumber ?? 0) > roundNumber);
 
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-slate-100">
@@ -438,17 +454,23 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
           </div>
           <div className="space-y-2">
             <h1 className="text-xl font-bold text-white">
-              {isLockedPreRound ? `Round ${roundNumber} Arena Locked` : 'Arena Access Restricted'}
+              {isRoundConcluded
+                ? `Round ${roundNumber} Concluded`
+                : isLockedPreRound
+                ? `Round ${roundNumber} Preparation Screen`
+                : 'Arena Access Restricted'}
             </h1>
             <p className="text-xs text-slate-400 leading-relaxed">
-              {isLockedPreRound
-                ? 'The competition arena will become available when your round begins. Please wait for the administrator to activate this round.'
-                : accessDeniedError}
+              {isRoundConcluded
+                ? `Round ${roundNumber} has concluded. Submissions and workspace access for this round are now closed.`
+                : accessDeniedError
+                ? accessDeniedError
+                : `Round ${roundNumber} has not officially started. Please wait for the tournament administrator to launch the round.`}
             </p>
           </div>
           <button
             onClick={() => navigate('/team/dashboard')}
-            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2"
+            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
           >
             <span>Return to Team Dashboard</span>
             <ArrowRight className="w-4 h-4" />
@@ -771,7 +793,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleRunCode()}
-                disabled={isRunning || isCompetitionPaused}
+                disabled={isRunning || isCompetitionPaused || isCurrentCaseSubmitted}
                 className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold flex items-center gap-1.5 transition-colors border border-slate-700 disabled:opacity-50 cursor-pointer shadow-2xs"
               >
                 {isRunning ? (
@@ -893,7 +915,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleRunCode(tc.stdin)}
-                          disabled={isCompetitionPaused || isRunning}
+                          disabled={isCompetitionPaused || isRunning || isCurrentCaseSubmitted}
                           className="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition cursor-pointer shrink-0 disabled:opacity-50 flex items-center gap-1"
                         >
                           <Play className="w-2.5 h-2.5 fill-current" />
@@ -910,7 +932,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleRunCode('CAPACITY=10 REFILL=2 CONSUME=5')}
-                        disabled={isCompetitionPaused || isRunning}
+                        disabled={isCompetitionPaused || isRunning || isCurrentCaseSubmitted}
                         className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 disabled:opacity-50 cursor-pointer"
                       >
                         Run Default
@@ -925,7 +947,7 @@ export const CodingWorkspacePreviewPage: React.FC = () => {
                   value={customInput}
                   onChange={(e) => setCustomInput(e.target.value)}
                   placeholder="Enter custom standard input (stdin) payload here..."
-                  disabled={isCompetitionPaused}
+                  disabled={isCompetitionPaused || isCurrentCaseSubmitted}
                   className="w-full h-full p-2.5 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs text-slate-200 resize-none focus:outline-none focus:border-emerald-500/50 disabled:opacity-50"
                 />
               )}

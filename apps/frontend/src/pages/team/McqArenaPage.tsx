@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Eye,
   PauseCircle,
+  Lock,
 } from 'lucide-react';
 
 export const McqArenaPage: React.FC = () => {
@@ -94,6 +95,13 @@ export const McqArenaPage: React.FC = () => {
   useEffect(() => {
     loadArenaState();
   }, []);
+
+  // Automatically refresh arena state when Round 1 becomes active
+  useEffect(() => {
+    if (isR1Active && !isSubmitted) {
+      loadArenaState();
+    }
+  }, [isR1Active]);
 
   // Timer Expiration Auto-Submit
   useEffect(() => {
@@ -189,6 +197,58 @@ export const McqArenaPage: React.FC = () => {
         <div className="text-center space-y-3">
           <RefreshCw className="w-8 h-8 animate-spin text-emerald-600 mx-auto" />
           <p className="text-sm font-bold text-emerald-950">Preparing Round 1 MCQ Arena...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Pre-Round Waiting Screen / Ineligible Access Screen (Strict Security Guarding)
+  if ((!isR1Active && !isSubmitted) || (error && !isSubmitted)) {
+    const isLockedPreRound =
+      !error ||
+      error.toLowerCase().includes('will become available') ||
+      error.toLowerCase().includes('countdown') ||
+      error.toLowerCase().includes('not currently active');
+
+    const isRoundConcluded =
+      compState?.status === 'COMPLETED' ||
+      (Boolean(compState?.currentRoundNumber) && (compState?.currentRoundNumber ?? 0) > 1);
+
+    return (
+      <div className="min-h-screen bg-[#f8faf9] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200 shadow-xl p-8 text-center space-y-5">
+          <div
+            className={`w-16 h-16 rounded-2xl ${
+              isLockedPreRound
+                ? 'bg-amber-50 border border-amber-300 text-amber-600'
+                : 'bg-rose-50 border border-rose-300 text-rose-600'
+            } flex items-center justify-center mx-auto`}
+          >
+            {isLockedPreRound ? <Lock className="w-8 h-8" /> : <ShieldAlert className="w-8 h-8" />}
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-extrabold text-slate-900">
+              {isRoundConcluded
+                ? 'Round 1 Concluded'
+                : isLockedPreRound
+                ? 'Round 1 MCQ Arena Locked'
+                : 'Arena Access Restricted'}
+            </h1>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              {isRoundConcluded
+                ? 'Round 1 has concluded. Submissions and question access are now closed.'
+                : error
+                ? error
+                : 'The competition arena will become available when Round 1 begins. Please wait for the tournament administrator to start the round.'}
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/team/dashboard')}
+            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+          >
+            <span>Return to Team Dashboard</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
     );
