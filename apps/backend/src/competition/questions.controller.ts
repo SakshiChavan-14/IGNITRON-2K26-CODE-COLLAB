@@ -15,25 +15,38 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { QuestionsService } from './questions.service';
+import { ArenaService } from './arena.service';
 import {
   QuestionType,
   CreateQuestionDto,
   UpdateQuestionDto,
+  AuthUser,
+  AuthTeamUser,
 } from '@ignitron/shared';
 
 @Controller('competition/questions')
 export class QuestionsController {
-  constructor(private readonly questionsService: QuestionsService) {}
+  constructor(
+    private readonly questionsService: QuestionsService,
+    private readonly arenaService: ArenaService,
+  ) {}
 
   /**
-   * Sanitized questions for contestants by round number (Public / Team)
-   * Strictly protects correct answers, explanations, and hidden test cases.
+   * Sanitized questions for contestants by round number (Guarded for Team / Admin)
+   * Strictly protects correct answers, explanations, and hidden test cases, and asserts round eligibility.
    */
   @Get('round/:roundNumber')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'TEAM')
   async getQuestionsForRound(
+    @CurrentUser() user: AuthUser,
     @Param('roundNumber', ParseIntPipe) roundNumber: number,
   ) {
+    if (user.type === 'TEAM') {
+      await this.arenaService.assertRoundAccess(user as AuthTeamUser, roundNumber, 'READ');
+    }
     const data = await this.questionsService.getSanitizedQuestionsForRound(roundNumber);
     return { success: true, data };
   }

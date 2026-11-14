@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -21,6 +22,7 @@ import {
   ShortlistSubmissionDto,
   GenerateDemoDataDto,
   BackendPublishLeaderboardDto,
+  UpdateRoundDurationDto,
 } from './dto/competition.dto';
 
 @Controller('competition')
@@ -48,6 +50,82 @@ export class CompetitionController {
     @Body() dto: RoundControlDto,
   ) {
     const result = await this.competitionService.executeRoundControl(dto, user.id);
+    return { success: true, ...result };
+  }
+
+  /**
+   * Administrator: Configure custom round duration in minutes
+   */
+  @Patch('rounds/:roundNumber/duration')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  async updateRoundDuration(
+    @Param('roundNumber', ParseIntPipe) roundNumber: number,
+    @Body() dto: UpdateRoundDurationDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const result = await this.competitionService.updateRoundDuration(
+      roundNumber,
+      dto.durationMinutes,
+      dto.confirmLiveAdjustment,
+      user.id,
+    );
+    return result;
+  }
+
+  /**
+   * Administrator: Announce upcoming round to eligible teams
+   */
+  @Post('control/announce-round')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  async announceRound(
+    @Body() body: { roundNumber: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    const result = await this.competitionService.executeRoundControl(
+      { action: 'ANNOUNCE_ROUND', roundNumber: body.roundNumber },
+      user.id,
+    );
+    return { success: true, ...result };
+  }
+
+  /**
+   * Administrator: Start synchronized countdown for upcoming round
+   */
+  @Post('control/start-countdown')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  async startCountdown(
+    @Body() body: { roundNumber: number; durationSeconds?: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    const result = await this.competitionService.executeRoundControl(
+      {
+        action: 'START_COUNTDOWN',
+        roundNumber: body.roundNumber,
+        countdownDurationSeconds: body.durationSeconds || 5,
+      },
+      user.id,
+    );
+    return { success: true, ...result };
+  }
+
+  /**
+   * Administrator: Cancel synchronized countdown
+   */
+  @Post('control/cancel-countdown')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  async cancelCountdown(@CurrentUser() user: AuthUser) {
+    const result = await this.competitionService.executeRoundControl(
+      { action: 'CANCEL_COUNTDOWN' },
+      user.id,
+    );
     return { success: true, ...result };
   }
 
